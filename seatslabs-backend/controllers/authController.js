@@ -21,7 +21,7 @@ const authController = {
 
             // Check if email exists
             const emailCheck = await client.query(
-                'SELECT * FROM users WHERE user_email = $1',
+                'SELECT * FROM "Users" WHERE "userEmail" = $1',
                 [email]
             );
 
@@ -31,7 +31,7 @@ const authController = {
 
             // Get user type ID
             const userTypeResult = await client.query(
-                'SELECT user_type_id FROM user_types WHERE user_type_name = $1',
+                'SELECT "userTypeId" FROM "UserTypes" WHERE "userTypeName" = $1',
                 [userType]
             );
 
@@ -39,18 +39,18 @@ const authController = {
                 throw new Error('Invalid user type');
             }
 
-            const userTypeId = userTypeResult.rows[0].user_type_id;
+            const userTypeId = userTypeResult.rows[0].userTypeId;
 
             // Hash password
             const passwordHash = await bcrypt.hash(password, 10);
 
             // Create user
             const userResult = await client.query(
-                `INSERT INTO users 
-        (user_type_id, user_first_name, user_middle_name, user_last_name, 
-         user_dob, user_email, user_password_hash, user_phone_number)
+                `INSERT INTO "Users" 
+        ("userTypeId", "userFirstName", "userMiddleName", "userLastName", 
+         "userDob", "userEmail", "userPasswordHash", "userPhoneNumber")
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING user_id, user_email, user_first_name, user_last_name`,
+        RETURNING "userId", "userEmail", "userFirstName", "userLastName"`,
                 [userTypeId, firstName, middleName, lastName, dob, email, passwordHash, phoneNumber]
             );
 
@@ -59,13 +59,13 @@ const authController = {
             // Create role-specific entry
             if (userType === 'Customer') {
                 await client.query(
-                    'INSERT INTO customers (user_id) VALUES ($1)',
-                    [user.user_id]
+                    'INSERT INTO "Customers" ("customerUserId") VALUES ($1)',
+                    [user.userId]
                 );
             } else if (userType === 'Advertiser') {
                 await client.query(
-                    'INSERT INTO advertisers (user_id, business_name) VALUES ($1, $2)',
-                    [user.user_id, req.body.businessName || 'Not Specified']
+                    'INSERT INTO "Advertisers" ("advertiserUserId", "advertiserBusinessName") VALUES ($1, $2)',
+                    [user.userId, req.body.businessName || 'Not Specified']
                 );
             }
 
@@ -73,7 +73,7 @@ const authController = {
 
             // Generate token
             const token = jwt.sign(
-                { userId: user.user_id, userType },
+                { userId: user.userId, userType },
                 process.env.JWT_SECRET,
                 { expiresIn: '7d' }
             );
@@ -83,10 +83,10 @@ const authController = {
                 message: 'Registration successful',
                 token,
                 user: {
-                    id: user.user_id,
-                    email: user.user_email,
-                    firstName: user.user_first_name,
-                    lastName: user.user_last_name,
+                    id: user.userId,
+                    email: user.userEmail,
+                    firstName: user.userFirstName,
+                    lastName: user.userLastName,
                     userType
                 }
             });
@@ -103,10 +103,10 @@ const authController = {
             const { email, password } = req.body;
 
             const result = await pool.query(
-                `SELECT u.*, ut.user_type_name 
-         FROM users u
-         JOIN user_types ut ON u.user_type_id = ut.user_type_id
-         WHERE u.user_email = $1 AND u.is_active = true`,
+                `SELECT u.*, ut."userTypeName" 
+         FROM "Users" u
+         JOIN "UserTypes" ut ON u."userTypeId" = ut."userTypeId"
+         WHERE u."userEmail" = $1 AND u."userIsActive" = true`,
                 [email]
             );
 
@@ -116,14 +116,14 @@ const authController = {
 
             const user = result.rows[0];
 
-            const isValidPassword = await bcrypt.compare(password, user.user_password_hash);
+            const isValidPassword = await bcrypt.compare(password, user.userPasswordHash);
 
             if (!isValidPassword) {
                 return res.status(401).json({ error: 'Invalid credentials' });
             }
 
             const token = jwt.sign(
-                { userId: user.user_id, userType: user.user_type_name },
+                { userId: user.userId, userType: user.userTypeName },
                 process.env.JWT_SECRET,
                 { expiresIn: '7d' }
             );
@@ -133,11 +133,11 @@ const authController = {
                 message: 'Login successful',
                 token,
                 user: {
-                    id: user.user_id,
-                    email: user.user_email,
-                    firstName: user.user_first_name,
-                    lastName: user.user_last_name,
-                    userType: user.user_type_name
+                    id: user.userId,
+                    email: user.userEmail,
+                    firstName: user.userFirstName,
+                    lastName: user.userLastName,
+                    userType: user.userTypeName
                 }
             });
         } catch (error) {

@@ -15,11 +15,11 @@ const bookingController = {
                 specialNotes
             } = req.body;
 
-            const customerId = req.user.customer_id;
+            const customerId = req.user.customerId;
 
             // Check time slot availability
             const slotCheck = await client.query(
-                'SELECT * FROM time_slots WHERE time_slot_id = $1 AND is_available = true',
+                'SELECT * FROM "TimeSlots" WHERE "timeSlotId" = $1 AND "timeSlotIsAvailable" = true',
                 [timeSlotId]
             );
 
@@ -28,13 +28,13 @@ const bookingController = {
             }
 
             const slot = slotCheck.rows[0];
-            if (slot.current_bookings >= slot.max_capacity) {
+            if (slot.timeSlotCurrentBookings >= slot.timeSlotMaxCapacity) {
                 throw new Error('Time slot is fully booked');
             }
 
             // Get service details for pricing
             const serviceResult = await client.query(
-                'SELECT * FROM services WHERE service_id = $1',
+                'SELECT * FROM "Services" WHERE "serviceId" = $1',
                 [serviceId]
             );
             const service = serviceResult.rows[0];
@@ -44,13 +44,13 @@ const bookingController = {
 
             // Create booking
             const scheduledDateTime = new Date(
-                `${slot.slot_date}T${slot.start_time}`
+                `${slot.timeSlotDate}T${slot.timeSlotStartTime}`
             );
 
             const bookingResult = await client.query(
-                `INSERT INTO bookings 
-        (customer_id, vehicle_id, service_id, time_slot_id, booking_reference, 
-         scheduled_date_time, booking_status, special_notes, estimated_price)
+                `INSERT INTO "Bookings" 
+        ("customerId", "vehicleId", "serviceId", "timeSlotId", "bookingReference", 
+         "bookingScheduledDateTime", "bookingStatus", "bookingSpecialNotes", "bookingEstimatedPrice")
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *`,
                 [
@@ -62,7 +62,7 @@ const bookingController = {
                     scheduledDateTime,
                     'Pending',
                     specialNotes,
-                    service.base_price
+                    service.serviceBasePrice
                 ]
             );
 
@@ -70,15 +70,15 @@ const bookingController = {
 
             // Update time slot
             await client.query(
-                'UPDATE time_slots SET current_bookings = current_bookings + 1 WHERE time_slot_id = $1',
+                'UPDATE "TimeSlots" SET "timeSlotCurrentBookings" = "timeSlotCurrentBookings" + 1 WHERE "timeSlotId" = $1',
                 [timeSlotId]
             );
 
             // Create initial status
             await client.query(
-                `INSERT INTO booking_statuses (booking_id, status, notes, updated_by_user_id)
+                `INSERT INTO "BookingStatuses" ("bookingId", "bookingStatusStatus", "bookingStatusNotes", "bookingStatusUpdatedByUserId")
          VALUES ($1, $2, $3, $4)`,
-                [booking.booking_id, 'Pending', 'Booking created', req.user.user_id]
+                [booking.bookingId, 'Pending', 'Booking created', req.user.userId]
             );
 
             await client.query('COMMIT');
@@ -96,39 +96,39 @@ const bookingController = {
         }
     },
 
-    // Get all bookings for customer
+    // Get all Bookings for customer
     getCustomerBookings: async (req, res) => {
         try {
-            const customerId = req.user.customer_id;
+            const customerId = req.user.customerId;
             const { status, limit = 10, offset = 0 } = req.query;
 
             let query = `
-        SELECT b.*, s.service_name, s.duration_minutes,
-               v.registration_number, v.manufacture_year,
-               vb.vehicle_brand_name, vm.vehicle_model_name,
-               ts.slot_date, ts.start_time, ts.end_time,
-               t.user_id as tech_user_id, 
-               u.user_first_name as tech_first_name,
-               u.user_last_name as tech_last_name
-        FROM bookings b
-        JOIN services s ON b.service_id = s.service_id
-        JOIN vehicles v ON b.vehicle_id = v.vehicle_id
-        JOIN vehicle_brands vb ON v.vehicle_brand_id = vb.vehicle_brand_id
-        JOIN vehicle_models vm ON v.vehicle_model_id = vm.vehicle_model_id
-        JOIN time_slots ts ON b.time_slot_id = ts.time_slot_id
-        LEFT JOIN technicians t ON b.technician_id = t.technician_id
-        LEFT JOIN users u ON t.user_id = u.user_id
-        WHERE b.customer_id = $1
+        SELECT b.*, s."serviceName", s."serviceDurationMinutes",
+               v."vehicleRegistrationNumber", v."vehicleManufactureYear",
+               vb."vehicleBrandName", vm."vehicleModelName",
+               ts.timeSlotSlotDate, ts."timeSlotStartTime", ts."timeSlotEndTime",
+               t."userId" as tech_userId, 
+               u."userFirstName" as tech_first_name,
+               u."userLastName" as tech_last_name
+        FROM "Bookings" b
+        JOIN "Services" s ON b."serviceId" = s."serviceId"
+        JOIN "Vehicles" v ON b."vehicleId" = v."vehicleId"
+        JOIN "VehicleBrands" vb ON v."vehicleBrandId" = vb."vehicleBrandId"
+        JOIN "VehicleModels" vm ON v."vehicleModelId" = vm."vehicleModelId"
+        JOIN "TimeSlots" ts ON b."timeSlotId" = ts."timeSlotId"
+        LEFT JOIN "Technicians" t ON b."technicianId" = t."technicianId"
+        LEFT JOIN "Users" u ON t."userId" = u."userId"
+        WHERE b."customerId" = $1
       `;
 
             const params = [customerId];
 
             if (status) {
-                query += ' AND b.booking_status = $2';
+                query += ' AND b.bookingStatus = $2';
                 params.push(status);
             }
 
-            query += ' ORDER BY b.scheduled_date_time DESC LIMIT $' +
+            query += ' ORDER BY b.bookingScheduledDateTime DESC LIMIT $' +
                 (params.length + 1) + ' OFFSET $' + (params.length + 2);
             params.push(limit, offset);
 
@@ -151,25 +151,25 @@ const bookingController = {
             await client.query('BEGIN');
 
             const { bookingId } = req.params;
-            const { status, notes } = req.body;
+            const { status, bookingStatusNotes } = req.body;
 
             // Update booking status
             await client.query(
-                'UPDATE bookings SET booking_status = $1, updated_at = CURRENT_TIMESTAMP WHERE booking_id = $2',
+                'UPDATE "Bookings" SET "bookingStatus" = $1, "bookingUpdatedAt" = CURRENT_TIMESTAMP WHERE "bookingId" = $2',
                 [status, bookingId]
             );
 
             // Add status history
             await client.query(
-                `INSERT INTO booking_statuses (booking_id, status, notes, updated_by_user_id)
+                `INSERT INTO "BookingStatuses" ("bookingId", "bookingStatusStatus", "bookingStatusNotes", "bookingStatusUpdatedByUserId")
          VALUES ($1, $2, $3, $4)`,
-                [bookingId, status, notes, req.user.user_id]
+                [bookingId, status, bookingStatusNotes, req.user.userId]
             );
 
             // If status is "In Progress", set actual start time
             if (status === 'In Progress') {
                 await client.query(
-                    'UPDATE bookings SET actual_start_time = CURRENT_TIMESTAMP WHERE booking_id = $1',
+                    'UPDATE "Bookings" SET "bookingActualStartTime" = CURRENT_TIMESTAMP WHERE "bookingId" = $1',
                     [bookingId]
                 );
             }
@@ -177,7 +177,7 @@ const bookingController = {
             // If status is "Completed", set actual end time
             if (status === 'Completed') {
                 await client.query(
-                    'UPDATE bookings SET actual_end_time = CURRENT_TIMESTAMP WHERE booking_id = $1',
+                    'UPDATE "Bookings" SET "bookingActualEndTime" = CURRENT_TIMESTAMP WHERE "bookingId" = $1',
                     [bookingId]
                 );
             }
@@ -204,7 +204,7 @@ const bookingController = {
 
             // Check if technician is available
             const techCheck = await pool.query(
-                'SELECT * FROM technicians WHERE technician_id = $1 AND is_available = true',
+                'SELECT * FROM "Technicians" WHERE "technicianId" = $1 AND "technicianIsAvailable" = true',
                 [technicianId]
             );
 
@@ -213,7 +213,7 @@ const bookingController = {
             }
 
             await pool.query(
-                'UPDATE bookings SET technician_id = $1, updated_at = CURRENT_TIMESTAMP WHERE booking_id = $2',
+                'UPDATE "Bookings" SET "technicianId" = $1, "bookingUpdatedAt" = CURRENT_TIMESTAMP WHERE "bookingId" = $2',
                 [technicianId, bookingId]
             );
 
@@ -230,11 +230,11 @@ const bookingController = {
     cancelBooking: async (req, res) => {
         try {
             const { bookingId } = req.params;
-            const customerId = req.user.customer_id;
+            const customerId = req.user.customerId;
 
             await pool.query(
-                `UPDATE bookings SET booking_status = 'Cancelled', updated_at = CURRENT_TIMESTAMP 
-                 WHERE booking_id = $1 AND customer_id = $2`,
+                `UPDATE "Bookings" SET "bookingStatus" = 'Cancelled', "bookingUpdatedAt" = CURRENT_TIMESTAMP 
+                 WHERE "bookingId" = $1 AND "customerId" = $2`,
                 [bookingId, customerId]
             );
 
@@ -249,12 +249,12 @@ const bookingController = {
         try {
             const { bookingId } = req.params;
             const { timeSlotId } = req.body;
-            const customerId = req.user.customer_id;
+            const customerId = req.user.customerId;
 
             // Simple update for now
             await pool.query(
-                `UPDATE bookings SET time_slot_id = $1, updated_at = CURRENT_TIMESTAMP 
-                 WHERE booking_id = $2 AND customer_id = $3`,
+                `UPDATE "Bookings" SET "timeSlotId" = $1, "bookingUpdatedAt" = CURRENT_TIMESTAMP 
+                 WHERE "bookingId" = $2 AND "customerId" = $3`,
                 [timeSlotId, bookingId, customerId]
             );
 
@@ -264,10 +264,23 @@ const bookingController = {
         }
     },
 
-    // Get all bookings (Manager)
+    // Get all Bookings (Manager)
     getAllBookings: async (req, res) => {
         try {
-            const result = await pool.query('SELECT * FROM bookings ORDER BY created_at DESC');
+            const result = await pool.query(`
+                SELECT b.*, 
+                       u."userFirstName" as customer_first_name, u."userLastName" as customer_last_name,
+                       s."serviceName", v."vehicleRegistrationNumber",
+                       tu."userFirstName" as tech_first_name, tu."userLastName" as tech_last_name
+                FROM "Bookings" b
+                LEFT JOIN "Customers" c ON b."customerId" = c."customerId"
+                LEFT JOIN "Users" u ON c."userId" = u."userId"
+                LEFT JOIN "Services" s ON b."serviceId" = s."serviceId"
+                LEFT JOIN "Vehicles" v ON b."vehicleId" = v."vehicleId"
+                LEFT JOIN "Technicians" t ON b."technicianId" = t."technicianId"
+                LEFT JOIN "Users" tu ON t."userId" = tu."userId"
+                ORDER BY b."bookingScheduledDateTime" DESC
+            `);
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -278,7 +291,7 @@ const bookingController = {
     getBookingById: async (req, res) => {
         try {
             const { bookingId } = req.params;
-            const result = await pool.query('SELECT * FROM bookings WHERE booking_id = $1', [bookingId]);
+            const result = await pool.query('SELECT * FROM "Bookings" WHERE "bookingId" = $1', [bookingId]);
             if (result.rows.length === 0) {
                 return res.status(404).json({ error: 'Booking not found' });
             }
@@ -293,7 +306,7 @@ const bookingController = {
         try {
             const { bookingId } = req.params;
             await pool.query(
-                "UPDATE bookings SET booking_status = 'Approved', updated_at = CURRENT_TIMESTAMP WHERE booking_id = $1",
+                "UPDATE Bookings SET bookingStatus = 'Approved', bookingUpdatedAt = CURRENT_TIMESTAMP WHERE bookingId = $1",
                 [bookingId]
             );
             res.json({ success: true, message: 'Booking approved' });
@@ -307,7 +320,7 @@ const bookingController = {
         try {
             const { bookingId } = req.params;
             await pool.query(
-                "UPDATE bookings SET booking_status = 'Rejected', updated_at = CURRENT_TIMESTAMP WHERE booking_id = $1",
+                "UPDATE Bookings SET bookingStatus = 'Rejected', bookingUpdatedAt = CURRENT_TIMESTAMP WHERE bookingId = $1",
                 [bookingId]
             );
             res.json({ success: true, message: 'Booking rejected' });
@@ -319,9 +332,9 @@ const bookingController = {
     // Get technician jobs
     getTechnicianJobs: async (req, res) => {
         try {
-            const technicianId = req.user.technician_id;
+            const technicianId = req.user.technicianId;
             const result = await pool.query(
-                'SELECT * FROM bookings WHERE technician_id = $1 ORDER BY scheduled_date_time ASC',
+                'SELECT * FROM "Bookings" WHERE "technicianId" = $1 ORDER BY "bookingScheduledDateTime" ASC',
                 [technicianId]
             );
             res.json({ success: true, data: result.rows });
@@ -330,18 +343,36 @@ const bookingController = {
         }
     },
 
-    // Add service notes
+    // Add service bookingStatuseNotes
     addServiceNotes: async (req, res) => {
         try {
             const { bookingId } = req.params;
-            const { notes } = req.body;
+            const { bookingStatusNotes } = req.body;
             await pool.query(
-                'UPDATE bookings SET special_notes = $1, updated_at = CURRENT_TIMESTAMP WHERE booking_id = $2',
-                [notes, bookingId]
+                'UPDATE "Bookings" SET "bookingSpecialNotes" = $1, "bookingUpdatedAt" = CURRENT_TIMESTAMP WHERE "bookingId" = $2',
+                [bookingStatusNotes, bookingId]
             );
-            res.json({ success: true, message: 'Service notes added' });
+            res.json({ success: true, message: 'Service bookingStatuseNotes added' });
         } catch (error) {
             res.status(400).json({ error: error.message });
+        }
+    },
+    // Get available slots for a date
+    // Get available slots for a date
+    getAvailableSlots: async (req, res) => {
+        try {
+            const { date } = req.query;
+            const result = await pool.query(
+                `SELECT * FROM "TimeSlots" 
+                 WHERE "timeSlotDate" = $1 
+                 AND "timeSlotIsAvailable" = true 
+                 AND "timeSlotCurrentBookings" < "timeSlotMaxCapacity"
+                 ORDER BY "timeSlotStartTime"`,
+                [date]
+            );
+            res.json({ success: true, data: result.rows });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
         }
     }
 };

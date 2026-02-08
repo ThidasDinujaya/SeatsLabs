@@ -14,8 +14,8 @@ const userController = {
         try {
             const { firstName, lastName, phoneNumber } = req.body;
             await pool.query(
-                'UPDATE users SET user_first_name = $1, user_last_name = $2, user_phone_number = $3, updated_at = CURRENT_TIMESTAMP WHERE user_id = $4',
-                [firstName, lastName, phoneNumber, req.user.user_id]
+                'UPDATE "Users" SET "userFirstName" = $1, "userLastName" = $2, "userPhoneNumber" = $3, "userUpdatedAt" = CURRENT_TIMESTAMP WHERE "userId" = $4',
+                [firstName, lastName, phoneNumber, req.user.userId]
             );
             res.json({ success: true, message: 'Profile updated' });
         } catch (error) {
@@ -27,14 +27,14 @@ const userController = {
         try {
             const { oldPassword, newPassword } = req.body;
             // Verify old password
-            const userResult = await pool.query('SELECT user_password_hash FROM users WHERE user_id = $1', [req.user.user_id]);
-            const isMatch = await bcrypt.compare(oldPassword, userResult.rows[0].user_password_hash);
+            const userResult = await pool.query('SELECT "userPasswordHash" FROM "Users" WHERE "userId" = $1', [req.user.userId]);
+            const isMatch = await bcrypt.compare(oldPassword, userResult.rows[0].userPasswordHash);
             if (!isMatch) {
                 return res.status(400).json({ error: 'Invalid old password' });
             }
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(newPassword, salt);
-            await pool.query('UPDATE users SET user_password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2', [hashedPassword, req.user.user_id]);
+            await pool.query('UPDATE "Users" SET "userPasswordHash" = $1, "userUpdatedAt" = CURRENT_TIMESTAMP WHERE "userId" = $2', [hashedPassword, req.user.userId]);
             res.json({ success: true, message: 'Password changed' });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -43,7 +43,7 @@ const userController = {
 
     deleteAccount: async (req, res) => {
         try {
-            await pool.query('UPDATE users SET is_active = false WHERE user_id = $1', [req.user.user_id]);
+            await pool.query('UPDATE "Users" SET "userIsActive" = false WHERE "userId" = $1', [req.user.userId]);
             res.json({ success: true, message: 'Account deactivated' });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -52,7 +52,7 @@ const userController = {
 
     getAllUsers: async (req, res) => {
         try {
-            const result = await pool.query('SELECT user_id, user_email, user_first_name, user_last_name, is_active FROM users');
+            const result = await pool.query('SELECT "userId", "userEmail", "userFirstName", "userLastName", "userIsActive" FROM "Users"');
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -61,7 +61,7 @@ const userController = {
 
     getAllCustomers: async (req, res) => {
         try {
-            const result = await pool.query('SELECT u.*, c.customer_id FROM users u JOIN customers c ON u.user_id = c.user_id');
+            const result = await pool.query('SELECT u.*, c."customerId" FROM "Users" u JOIN "Customers" c ON u."userId" = c."userId"');
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -70,7 +70,7 @@ const userController = {
 
     getAllTechnicians: async (req, res) => {
         try {
-            const result = await pool.query('SELECT u.*, t.technician_id, t.specialization FROM users u JOIN technicians t ON u.user_id = t.user_id');
+            const result = await pool.query('SELECT u.*, t."technicianId", t."technicianSpecialization" FROM "Users" u JOIN "Technicians" t ON u."userId" = t."userId"');
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -78,21 +78,59 @@ const userController = {
     },
 
     createTechnician: async (req, res) => {
-        // Implementation for creating technician
-        res.status(501).json({ error: 'Not implemented' });
+        try {
+            const { firstName, lastName, email, phone, password, technicianSpecialization, skillLevel } = req.body;
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(password, salt);
+
+            const result = await pool.query(
+                `WITH new_user AS (
+                    INSERT INTO "Users" ("userTypeId", "userFirstName", "userLastName", "userEmail", "userPhoneNumber", "userPasswordHash")
+                    VALUES ((SELECT "userTypeId" FROM "UserTypes" WHERE "userTypeName" = 'Technician'), $1, $2, $3, $4, $5)
+                    RETURNING "userId"
+                )
+                INSERT INTO "Technicians" ("userId", "technicianSpecialization", "technicianSkillLevel")
+                SELECT "userId", $6, $7 FROM new_user RETURNING *`,
+                [firstName, lastName, email, phone, hashedPassword, technicianSpecialization, skillLevel]
+            );
+            res.status(201).json({ success: true, data: result.rows[0] });
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
     },
 
     updateTechnician: async (req, res) => {
-        res.status(501).json({ error: 'Not implemented' });
+        try {
+            const { technicianId } = req.params;
+            const { technicianSpecialization, skillLevel, technicianIsAvailable } = req.body;
+            await pool.query(
+                'UPDATE "Technicians" SET "technicianSpecialization" = $1, "technicianSkillLevel" = $2, "technicianIsAvailable" = $3 WHERE "technicianId" = $4',
+                [technicianSpecialization, skillLevel, technicianIsAvailable, technicianId]
+            );
+            res.json({ success: true, message: 'Technician updated' });
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
     },
 
     deleteTechnician: async (req, res) => {
-        res.status(501).json({ error: 'Not implemented' });
+        try {
+            const { technicianId } = req.params;
+            const techResult = await pool.query('SELECT "userId" FROM "Technicians" WHERE "technicianId" = $1', [technicianId]);
+            if (techResult.rows.length > 0) {
+                await pool.query('UPDATE "Users" SET "userIsActive" = false WHERE "userId" = $1', [techResult.rows[0].userId]);
+                res.json({ success: true, message: 'Technician deactivated' });
+            } else {
+                res.status(404).json({ error: 'Technician not found' });
+            }
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
     },
 
     getAllAdvertisers: async (req, res) => {
         try {
-            const result = await pool.query('SELECT u.*, ad.advertiser_id, ad.business_name FROM users u JOIN advertisers ad ON u.user_id = ad.user_id');
+            const result = await pool.query('SELECT u.*, ad."advertiserId", ad."advertiserBusinessName" FROM "Users" u JOIN "Advertisers" ad ON u."userId" = ad."userId"');
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -102,7 +140,7 @@ const userController = {
     approveAdvertiser: async (req, res) => {
         try {
             const { advertiserId } = req.params;
-            await pool.query('UPDATE advertisers SET is_approved = true WHERE advertiser_id = $1', [advertiserId]);
+            await pool.query('UPDATE "Advertisers" SET "advertiserIsApproved" = true WHERE "advertiserId" = $1', [advertiserId]);
             res.json({ success: true, message: 'Advertiser approved' });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -112,7 +150,7 @@ const userController = {
     activateUser: async (req, res) => {
         try {
             const { userId } = req.params;
-            await pool.query('UPDATE users SET is_active = true WHERE user_id = $1', [userId]);
+            await pool.query('UPDATE "Users" SET "userIsActive" = true WHERE "userId" = $1', [userId]);
             res.json({ success: true, message: 'User activated' });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -122,7 +160,7 @@ const userController = {
     deactivateUser: async (req, res) => {
         try {
             const { userId } = req.params;
-            await pool.query('UPDATE users SET is_active = false WHERE user_id = $1', [userId]);
+            await pool.query('UPDATE "Users" SET "userIsActive" = false WHERE "userId" = $1', [userId]);
             res.json({ success: true, message: 'User deactivated' });
         } catch (error) {
             res.status(400).json({ error: error.message });

@@ -3,7 +3,7 @@ const pool = require('../config/database');
 
 const authenticate = async (req, res, next) => {
     try {
-        const token = req.headers.authorization?.split(' ')[1];
+        const token = req.headers.authorization?.split(' ')[1] || req.query.token;
 
         if (!token) {
             return res.status(401).json({ error: 'Authentication required' });
@@ -12,16 +12,16 @@ const authenticate = async (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         const result = await pool.query(
-            `SELECT u.user_id, u.user_email, u.user_first_name, u.user_last_name, u.user_type_id, u.is_active,
-                    ut.user_type_name, 
-                    c.customer_id, ad.advertiser_id, t.technician_id, m.manager_id
-             FROM users u 
-             JOIN user_types ut ON u.user_type_id = ut.user_type_id 
-             LEFT JOIN customers c ON u.user_id = c.user_id
-             LEFT JOIN advertisers ad ON u.user_id = ad.user_id
-             LEFT JOIN technicians t ON u.user_id = t.user_id
-             LEFT JOIN managers m ON u.user_id = m.user_id
-             WHERE u.user_id = $1 AND u.is_active = true`,
+            `SELECT u."userId", u."userEmail", u."userFirstName", u."userLastName", u."userTypeId", u."userIsActive",
+                    ut."userTypeName", 
+                    c."customerId", ad."advertiserId", t."technicianId", m."managerId"
+             FROM "Users" u 
+             JOIN "UserTypes" ut ON u."userTypeId" = ut."userTypeId" 
+             LEFT JOIN "Customers" c ON u."userId" = c."customerUserId"
+             LEFT JOIN "Advertisers" ad ON u."userId" = ad."advertiserUserId"
+             LEFT JOIN "Technicians" t ON u."userId" = t."technicianUserId"
+             LEFT JOIN "Managers" m ON u."userId" = m."managerUserId"
+             WHERE u."userId" = $1 AND u."userIsActive" = true`,
             [decoded.userId]
         );
 
@@ -38,7 +38,7 @@ const authenticate = async (req, res, next) => {
 
 const authorize = (...roles) => {
     return (req, res, next) => {
-        if (!roles.includes(req.user.user_type_name)) {
+        if (!roles.includes(req.user.userTypeName)) {
             return res.status(403).json({
                 error: 'Access denied. Insufficient permissions.'
             });

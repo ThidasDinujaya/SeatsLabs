@@ -1,307 +1,314 @@
+-- Database Creation
+DROP DATABASE IF EXISTS "SeatsLabsDB";
+CREATE DATABASE "SeatsLabsDB";
+
+-- Connect to database (For psql command line tool)
+\c "SeatsLabsDB";
+
 -- User Management Tables
-CREATE TABLE user_types (
-    user_type_id SERIAL PRIMARY KEY,
-    user_type_name VARCHAR(50) UNIQUE NOT NULL,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "UserTypes" (
+    "userTypeId" SERIAL PRIMARY KEY,
+    "userTypeName" VARCHAR(50) UNIQUE NOT NULL,
+    "userTypeDescription" TEXT,
+    "userTypeCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE users (
-    user_id SERIAL PRIMARY KEY,
-    user_type_id INTEGER REFERENCES user_types(user_type_id),
-    user_first_name VARCHAR(100) NOT NULL,
-    user_middle_name VARCHAR(100),
-    user_last_name VARCHAR(100) NOT NULL,
-    user_dob DATE,
-    user_email VARCHAR(255) UNIQUE NOT NULL,
-    user_password_hash VARCHAR(255) NOT NULL,
-    user_phone_number VARCHAR(20) UNIQUE NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Users" (
+    "userId" SERIAL PRIMARY KEY,
+    "userTypeId" INTEGER REFERENCES "UserTypes"("userTypeId"),
+    "userFirstName" VARCHAR(100) NOT NULL,
+    "userMiddleName" VARCHAR(100),
+    "userLastName" VARCHAR(100) NOT NULL,
+    "userDob" DATE,
+    "userEmail" VARCHAR(255) UNIQUE NOT NULL,
+    "userPasswordHash" VARCHAR(255) NOT NULL,
+    "userPhoneNumber" VARCHAR(20) UNIQUE NOT NULL,
+    "userIsActive" BOOLEAN DEFAULT true,
+    "userCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "userUpdatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE managers (
-    manager_id SERIAL PRIMARY KEY,
-    user_id INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
-    department VARCHAR(100),
-    join_date DATE DEFAULT CURRENT_DATE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Managers" (
+    "managerId" SERIAL PRIMARY KEY,
+    "managerUserId" INTEGER UNIQUE REFERENCES "Users"("userId") ON DELETE CASCADE,
+    "managerDepartment" VARCHAR(100),
+    "managerJoinDate" DATE DEFAULT CURRENT_DATE,
+    "managerCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE technicians (
-    technician_id SERIAL PRIMARY KEY,
-    user_id INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
-    specialization VARCHAR(100),
-    skill_level VARCHAR(50),
-    is_available BOOLEAN DEFAULT true,
-    performance_rating DECIMAL(3,2) DEFAULT 0.00,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Technicians" (
+    "technicianId" SERIAL PRIMARY KEY,
+    "technicianUserId" INTEGER UNIQUE REFERENCES "Users"("userId") ON DELETE CASCADE,
+    "technicianSpecialization" VARCHAR(100),
+    "technicianSkillLevel" VARCHAR(50),
+    "technicianIsAvailable" BOOLEAN DEFAULT true,
+    "technicianPerformanceRating" DECIMAL(3,2) DEFAULT 0.00,
+    "technicianCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE customers (
-    customer_id SERIAL PRIMARY KEY,
-    user_id INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
-    preferred_contact_method VARCHAR(20) DEFAULT 'email',
-    loyalty_points INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Customers" (
+    "customerId" SERIAL PRIMARY KEY,
+    "customerUserId" INTEGER UNIQUE REFERENCES "Users"("userId") ON DELETE CASCADE,
+    "customerPreferredContactMethod" VARCHAR(20) DEFAULT 'email',
+    "customerLoyaltyPoints" INTEGER DEFAULT 0,
+    "customerCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE advertisers (
-    advertiser_id SERIAL PRIMARY KEY,
-    user_id INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
-    business_name VARCHAR(255) NOT NULL,
-    business_type VARCHAR(100),
-    tax_id VARCHAR(50) UNIQUE,
-    contact_person VARCHAR(255),
-    is_approved BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Advertisers" (
+    "advertiserId" SERIAL PRIMARY KEY,
+    "advertiserUserId" INTEGER UNIQUE REFERENCES "Users"("userId") ON DELETE CASCADE,
+    "advertiserBusinessName" VARCHAR(255) NOT NULL,
+    "advertiserBusinessType" VARCHAR(100),
+    "advertiserTaxId" VARCHAR(50) UNIQUE,
+    "advertiserContactPerson" VARCHAR(255),
+    "advertiserIsApproved" BOOLEAN DEFAULT false,
+    "advertiserCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Vehicle Management Tables
-CREATE TABLE vehicle_brands (
-    vehicle_brand_id SERIAL PRIMARY KEY,
-    vehicle_brand_name VARCHAR(100) UNIQUE NOT NULL,
-    country VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "VehicleBrands" (
+    "vehicleBrandId" SERIAL PRIMARY KEY,
+    "vehicleBrandName" VARCHAR(100) UNIQUE NOT NULL,
+    "vehicleBrandCountry" VARCHAR(100),
+    "vehicleBrandCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE vehicle_models (
-    vehicle_model_id SERIAL PRIMARY KEY,
-    vehicle_brand_id INTEGER REFERENCES vehicle_brands(vehicle_brand_id),
-    vehicle_model_name VARCHAR(100) NOT NULL,
-    year_introduced INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "VehicleModels" (
+    "vehicleModelId" SERIAL PRIMARY KEY,
+    "vehicleModelVehicleBrandId" INTEGER REFERENCES "VehicleBrands"("vehicleBrandId"),
+    "vehicleModelName" VARCHAR(100) NOT NULL,
+    "vehicleModelYearIntroduced" INTEGER,
+    "vehicleModelCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE vehicle_body_types (
-    vehicle_body_type_id SERIAL PRIMARY KEY,
-    vehicle_body_type_name VARCHAR(50) UNIQUE NOT NULL,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "VehicleBodyTypes" (
+    "vehicleBodyTypeId" SERIAL PRIMARY KEY,
+    "vehicleBodyTypeName" VARCHAR(50) UNIQUE NOT NULL,
+    "vehicleBodyTypeDescription" TEXT,
+    "vehicleBodyTypeCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE vehicles (
-    vehicle_id SERIAL PRIMARY KEY,
-    customer_id INTEGER REFERENCES customers(customer_id) ON DELETE CASCADE,
-    vehicle_brand_id INTEGER REFERENCES vehicle_brands(vehicle_brand_id),
-    vehicle_model_id INTEGER REFERENCES vehicle_models(vehicle_model_id),
-    vehicle_body_type_id INTEGER REFERENCES vehicle_body_types(vehicle_body_type_id),
-    registration_number VARCHAR(20) UNIQUE NOT NULL,
-    manufacture_year INTEGER,
-    color VARCHAR(50),
-    mileage INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Vehicles" (
+    "vehicleId" SERIAL PRIMARY KEY,
+    "vehicleCustomerId" INTEGER REFERENCES "Customers"("customerId") ON DELETE CASCADE,
+    "vehicleVehicleBrandId" INTEGER REFERENCES "VehicleBrands"("vehicleBrandId"),
+    "vehicleVehicleModelId" INTEGER REFERENCES "VehicleModels"("vehicleModelId"),
+    "vehicleVehicleBodyTypeId" INTEGER REFERENCES "VehicleBodyTypes"("vehicleBodyTypeId"),
+    "vehicleRegistrationNumber" VARCHAR(20) UNIQUE NOT NULL,
+    "vehicleManufactureYear" INTEGER,
+    "vehicleColor" VARCHAR(50),
+    "vehicleMileage" INTEGER,
+    "vehicleCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "vehicleUpdatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Service Management Tables
-CREATE TABLE service_categories (
-    service_category_id SERIAL PRIMARY KEY,
-    service_category_name VARCHAR(100) UNIQUE NOT NULL,
-    service_category_description TEXT,
-    is_available BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "ServiceCategories" (
+    "serviceCategoryId" SERIAL PRIMARY KEY,
+    "serviceCategoryName" VARCHAR(100) UNIQUE NOT NULL,
+    "serviceCategoryDescription" TEXT,
+    "serviceCategoryIsAvailable" BOOLEAN DEFAULT true,
+    "serviceCategoryCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "serviceCategoryUpdatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE services (
-    service_id SERIAL PRIMARY KEY,
-    service_category_id INTEGER REFERENCES service_categories(service_category_id),
-    service_name VARCHAR(100) UNIQUE NOT NULL,
-    service_description TEXT,
-    duration_minutes INTEGER NOT NULL,
-    base_price DECIMAL(10,2) NOT NULL,
-    is_available BOOLEAN DEFAULT true,
-    requirements TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Services" (
+    "serviceId" SERIAL PRIMARY KEY,
+    "serviceServiceCategoryId" INTEGER REFERENCES "ServiceCategories"("serviceCategoryId"),
+    "serviceName" VARCHAR(100) UNIQUE NOT NULL,
+    "serviceDescription" TEXT,
+    "serviceDurationMinutes" INTEGER NOT NULL,
+    "serviceBasePrice" DECIMAL(10,2) NOT NULL,
+    "serviceIsAvailable" BOOLEAN DEFAULT true,
+    "serviceRequirements" TEXT,
+    "serviceCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "serviceUpdatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Time Slot Management
-CREATE TABLE time_slots (
-    time_slot_id SERIAL PRIMARY KEY,
-    slot_date DATE NOT NULL,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    is_available BOOLEAN DEFAULT true,
-    max_capacity INTEGER DEFAULT 1,
-    current_bookings INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(slot_date, start_time)
+CREATE TABLE "TimeSlots" (
+    "timeSlotId" SERIAL PRIMARY KEY,
+    "timeSlotDate" DATE NOT NULL,
+    "timeSlotStartTime" TIME NOT NULL,
+    "timeSlotEndTime" TIME NOT NULL,
+    "timeSlotIsAvailable" BOOLEAN DEFAULT true,
+    "timeSlotMaxCapacity" INTEGER DEFAULT 1,
+    "timeSlotCurrentBookings" INTEGER DEFAULT 0,
+    "timeSlotCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE("timeSlotDate", "timeSlotStartTime")
 );
 
 -- Booking Management
-CREATE TABLE bookings (
-    booking_id SERIAL PRIMARY KEY,
-    customer_id INTEGER REFERENCES customers(customer_id),
-    vehicle_id INTEGER REFERENCES vehicles(vehicle_id),
-    service_id INTEGER REFERENCES services(service_id),
-    time_slot_id INTEGER REFERENCES time_slots(time_slot_id),
-    technician_id INTEGER REFERENCES technicians(technician_id),
-    booking_reference VARCHAR(20) UNIQUE NOT NULL,
-    scheduled_date_time TIMESTAMP NOT NULL,
-    actual_start_time TIMESTAMP,
-    actual_end_time TIMESTAMP,
-    booking_status VARCHAR(50) DEFAULT 'Pending',
-    special_notes TEXT,
-    estimated_price DECIMAL(10,2),
-    actual_price DECIMAL(10,2),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Bookings" (
+    "bookingId" SERIAL PRIMARY KEY,
+    "bookingCustomerId" INTEGER REFERENCES "Customers"("customerId"),
+    "bookingVehicleId" INTEGER REFERENCES "Vehicles"("vehicleId"),
+    "bookingServiceId" INTEGER REFERENCES "Services"("serviceId"),
+    "bookingTimeSlotId" INTEGER REFERENCES "TimeSlots"("timeSlotId"),
+    "bookingTechnicianId" INTEGER REFERENCES "Technicians"("technicianId"),
+    "bookingReference" VARCHAR(20) UNIQUE NOT NULL,
+    "bookingScheduledDateTime" TIMESTAMP NOT NULL,
+    "bookingActualStartTime" TIMESTAMP,
+    "bookingActualEndTime" TIMESTAMP,
+    "bookingStatus" VARCHAR(50) DEFAULT 'Pending',
+    "bookingSpecialNotes" TEXT,
+    "bookingEstimatedPrice" DECIMAL(10,2),
+    "bookingActualPrice" DECIMAL(10,2),
+    "bookingCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "bookingUpdatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE booking_statuses (
-    status_id SERIAL PRIMARY KEY,
-    booking_id INTEGER REFERENCES bookings(booking_id) ON DELETE CASCADE,
-    status VARCHAR(50) NOT NULL,
-    status_date_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    notes TEXT,
-    updated_by_user_id INTEGER REFERENCES users(user_id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "BookingStatuses" (
+    "bookingStatusId" SERIAL PRIMARY KEY,
+    "bookingStatusBookingId" INTEGER REFERENCES "Bookings"("bookingId") ON DELETE CASCADE,
+    "bookingStatusStatus" VARCHAR(50) NOT NULL,
+    "bookingStatusDateTime" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "bookingStatusNotes" TEXT,
+    "bookingStatusUpdatedByUserId" INTEGER REFERENCES "Users"("userId"),
+    "bookingStatusCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Payment Tables
-CREATE TABLE payment_methods (
-    payment_method_id SERIAL PRIMARY KEY,
-    method_name VARCHAR(50) UNIQUE NOT NULL,
-    method_type VARCHAR(50) NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "PaymentMethods" (
+    "paymentMethodId" SERIAL PRIMARY KEY,
+    "paymentMethodName" VARCHAR(50) UNIQUE NOT NULL,
+    "paymentMethodType" VARCHAR(50) NOT NULL,
+    "paymentMethodIsActive" BOOLEAN DEFAULT true,
+    "paymentMethodCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE payments (
-    payment_id SERIAL PRIMARY KEY,
-    booking_id INTEGER REFERENCES bookings(booking_id),
-    payment_method_id INTEGER REFERENCES payment_methods(payment_method_id),
-    amount DECIMAL(10,2) NOT NULL,
-    payment_status VARCHAR(50) DEFAULT 'Pending',
-    transaction_id VARCHAR(100) UNIQUE,
-    payment_date_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    payment_gateway_response TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Payments" (
+    "paymentId" SERIAL PRIMARY KEY,
+    "paymentBookingId" INTEGER REFERENCES "Bookings"("bookingId"),
+    "paymentPaymentMethodId" INTEGER REFERENCES "PaymentMethods"("paymentMethodId"),
+    "paymentAmount" DECIMAL(10,2) NOT NULL,
+    "paymentStatus" VARCHAR(50) DEFAULT 'Pending',
+    "paymentTransactionId" VARCHAR(100) UNIQUE,
+    "paymentDateTime" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "paymentGatewayResponse" TEXT,
+    "paymentCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Advertisement Tables
-CREATE TABLE ad_pricing_plans (
-    pricing_plan_id SERIAL PRIMARY KEY,
-    plan_name VARCHAR(50) UNIQUE NOT NULL,
-    plan_type VARCHAR(50) NOT NULL,
-    price_per_day DECIMAL(10,2) NOT NULL,
-    max_impressions INTEGER,
-    features TEXT,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "AdPricingPlans" (
+    "adPricingPlanId" SERIAL PRIMARY KEY,
+    "adPricingPlanName" VARCHAR(50) UNIQUE NOT NULL,
+    "adPricingPlanType" VARCHAR(50) NOT NULL,
+    "adPricingPlanPricePerDay" DECIMAL(10,2) NOT NULL,
+    "adPricingPlanMaxImpressions" INTEGER,
+    "adPricingPlanFeatures" TEXT,
+    "adPricingPlanIsActive" BOOLEAN DEFAULT true,
+    "adPricingPlanCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE ad_campaigns (
-    campaign_id SERIAL PRIMARY KEY,
-    advertiser_id INTEGER REFERENCES advertisers(advertiser_id),
-    pricing_plan_id INTEGER REFERENCES ad_pricing_plans(pricing_plan_id),
-    campaign_name VARCHAR(255) NOT NULL,
-    campaign_type VARCHAR(50),
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    status VARCHAR(50) DEFAULT 'Draft',
-    budget DECIMAL(10,2),
-    target_audience TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "AdCampaigns" (
+    "adCampaignId" SERIAL PRIMARY KEY,
+    "adCampaignAdvertiserId" INTEGER REFERENCES "Advertisers"("advertiserId"),
+    "adCampaignPricingPlanId" INTEGER REFERENCES "AdPricingPlans"("adPricingPlanId"),
+    "adCampaignName" VARCHAR(255) NOT NULL,
+    "adCampaignType" VARCHAR(50),
+    "adCampaignStartDate" DATE NOT NULL,
+    "adCampaignEndDate" DATE NOT NULL,
+    "adCampaignStatus" VARCHAR(50) DEFAULT 'Draft',
+    "adCampaignBudget" DECIMAL(10,2),
+    "adCampaignTargetAudience" TEXT,
+    "adCampaignCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "adCampaignUpdatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE advertisements (
-    advertisement_id SERIAL PRIMARY KEY,
-    campaign_id INTEGER REFERENCES ad_campaigns(campaign_id) ON DELETE CASCADE,
-    ad_title VARCHAR(255) NOT NULL,
-    ad_content TEXT,
-    media_type VARCHAR(50),
-    media_url TEXT,
-    target_service_type TEXT,
-    display_priority INTEGER DEFAULT 0,
-    is_approved BOOLEAN DEFAULT false,
-    approved_at TIMESTAMP,
-    approved_by_user_id INTEGER REFERENCES users(user_id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Advertisements" (
+    "advertisementId" SERIAL PRIMARY KEY,
+    "advertisementCampaignId" INTEGER REFERENCES "AdCampaigns"("adCampaignId") ON DELETE CASCADE,
+    "advertisementTitle" VARCHAR(255) NOT NULL,
+    "advertisementContent" TEXT,
+    "advertisementMediaType" VARCHAR(50),
+    "advertisementMediaUrl" TEXT,
+    "advertisementTargetServiceType" TEXT,
+    "advertisementDisplayPriority" INTEGER DEFAULT 0,
+    "advertisementIsApproved" BOOLEAN DEFAULT false,
+    "advertisementApprovedAt" TIMESTAMP,
+    "advertisementApprovedByUserId" INTEGER REFERENCES "Users"("userId"),
+    "advertisementCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "advertisementUpdatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Notification Tables
-CREATE TABLE notification_templates (
-    template_id SERIAL PRIMARY KEY,
-    template_name VARCHAR(100) UNIQUE NOT NULL,
-    template_type VARCHAR(50) NOT NULL,
-    subject VARCHAR(255),
-    message_body TEXT NOT NULL,
-    variables TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "NotificationTemplates" (
+    "notificationTemplateId" SERIAL PRIMARY KEY,
+    "notificationTemplateName" VARCHAR(100) UNIQUE NOT NULL,
+    "notificationTemplateType" VARCHAR(50) NOT NULL,
+    "notificationTemplateSubject" VARCHAR(255),
+    "notificationTemplateMessageBody" TEXT NOT NULL,
+    "notificationTemplateVariables" TEXT,
+    "notificationTemplateCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "notificationTemplateUpdatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE notifications (
-    notification_id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(user_id),
-    template_id INTEGER REFERENCES notification_templates(template_id),
-    booking_id INTEGER REFERENCES bookings(booking_id),
-    notification_type VARCHAR(50) NOT NULL,
-    notification_title VARCHAR(255),
-    notification_message TEXT NOT NULL,
-    is_read BOOLEAN DEFAULT false,
-    scheduled_time TIMESTAMP,
-    sent_time TIMESTAMP,
-    delivery_status VARCHAR(50) DEFAULT 'Pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Notifications" (
+    "notificationId" SERIAL PRIMARY KEY,
+    "notificationUserId" INTEGER REFERENCES "Users"("userId"),
+    "notificationTemplateId" INTEGER REFERENCES "NotificationTemplates"("notificationTemplateId"),
+    "notificationBookingId" INTEGER REFERENCES "Bookings"("bookingId"),
+    "notificationType" VARCHAR(50) NOT NULL,
+    "notificationTitle" VARCHAR(255),
+    "notificationMessage" TEXT NOT NULL,
+    "notificationIsRead" BOOLEAN DEFAULT false,
+    "notificationScheduledTime" TIMESTAMP,
+    "notificationSentTime" TIMESTAMP,
+    "notificationDeliveryStatus" VARCHAR(50) DEFAULT 'Pending',
+    "notificationCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Feedback Tables
-CREATE TABLE feedbacks (
-    feedback_id SERIAL PRIMARY KEY,
-    booking_id INTEGER REFERENCES bookings(booking_id) ON DELETE CASCADE,
-    customer_id INTEGER REFERENCES customers(customer_id),
-    technician_id INTEGER REFERENCES technicians(technician_id),
-    service_rating INTEGER CHECK (service_rating >= 1 AND service_rating <= 5),
-    technician_rating INTEGER CHECK (technician_rating >= 1 AND technician_rating <= 5),
-    comments TEXT,
-    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "Feedbacks" (
+    "feedbackId" SERIAL PRIMARY KEY,
+    "feedbackBookingId" INTEGER REFERENCES "Bookings"("bookingId") ON DELETE CASCADE,
+    "feedbackCustomerId" INTEGER REFERENCES "Customers"("customerId"),
+    "feedbackTechnicianId" INTEGER REFERENCES "Technicians"("technicianId"),
+    "feedbackServiceRating" INTEGER CHECK ("feedbackServiceRating" >= 1 AND "feedbackServiceRating" <= 5),
+    "feedbackTechnicianRating" INTEGER CHECK ("feedbackTechnicianRating" >= 1 AND "feedbackTechnicianRating" <= 5),
+    "feedbackComments" TEXT,
+    "feedbackSubmittedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE complaints (
-    complaint_id SERIAL PRIMARY KEY,
-    booking_id INTEGER REFERENCES bookings(booking_id),
-    customer_id INTEGER REFERENCES customers(customer_id),
-    complaint_type VARCHAR(100),
-    complaint_description TEXT NOT NULL,
-    status VARCHAR(50) DEFAULT 'Open',
-    resolution TEXT,
-    resolved_by_user_id INTEGER REFERENCES users(user_id),
-    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    resolved_at TIMESTAMP
+CREATE TABLE "Complaints" (
+    "complaintId" SERIAL PRIMARY KEY,
+    "complaintBookingId" INTEGER REFERENCES "Bookings"("bookingId"),
+    "complaintCustomerId" INTEGER REFERENCES "Customers"("customerId"),
+    "complaintType" VARCHAR(100),
+    "complaintDescription" TEXT NOT NULL,
+    "complaintStatus" VARCHAR(50) DEFAULT 'Open',
+    "complaintResolution" TEXT,
+    "complaintResolvedByUserId" INTEGER REFERENCES "Users"("userId"),
+    "complaintSubmittedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "complaintResolvedAt" TIMESTAMP
 );
 
--- Indexes for Performance
-CREATE INDEX idx_users_email ON users(user_email);
-CREATE INDEX idx_bookings_customer ON bookings(customer_id);
-CREATE INDEX idx_bookings_date ON bookings(scheduled_date_time);
-CREATE INDEX idx_bookings_status ON bookings(booking_status);
-CREATE INDEX idx_time_slots_date ON time_slots(slot_date);
-CREATE INDEX idx_notifications_user ON notifications(user_id);
+-- Indexes for Performance (Updated indices to match new attribute names)
+CREATE INDEX idx_users_email ON "Users"("userEmail");
+CREATE INDEX idx_bookings_customer ON "Bookings"("bookingCustomerId");
+CREATE INDEX idx_bookings_date ON "Bookings"("bookingScheduledDateTime");
+CREATE INDEX idx_bookings_status ON "Bookings"("bookingStatus");
+CREATE INDEX idx_time_slots_date ON "TimeSlots"("timeSlotDate");
+CREATE INDEX idx_notifications_user ON "Notifications"("notificationUserId");
 
 -- missing tables for ads and payments
-CREATE TABLE ad_payments (
-    ad_payment_id SERIAL PRIMARY KEY,
-    campaign_id INTEGER REFERENCES ad_campaigns(campaign_id),
-    amount DECIMAL(10,2) NOT NULL,
-    payment_status VARCHAR(50) DEFAULT 'Pending',
-    transaction_id VARCHAR(100) UNIQUE,
-    payment_date_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "AdPayments" (
+    "adPaymentId" SERIAL PRIMARY KEY,
+    "adPaymentCampaignId" INTEGER REFERENCES "AdCampaigns"("adCampaignId"),
+    "adPaymentAmount" DECIMAL(10,2) NOT NULL,
+    "adPaymentStatus" VARCHAR(50) DEFAULT 'Pending',
+    "adPaymentTransactionId" VARCHAR(100) UNIQUE,
+    "adPaymentDateTime" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "adPaymentCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE ad_analytics (
-    analytics_id SERIAL PRIMARY KEY,
-    advertisement_id INTEGER REFERENCES advertisements(advertisement_id) ON DELETE CASCADE,
-    analytics_date DATE DEFAULT CURRENT_DATE,
-    impressions INTEGER DEFAULT 0,
-    clicks INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(advertisement_id, analytics_date)
+CREATE TABLE "AdAnalytics" (
+    "adAnalyticsId" SERIAL PRIMARY KEY,
+    "adAnalyticsAdvertisementId" INTEGER REFERENCES "Advertisements"("advertisementId") ON DELETE CASCADE,
+    "adAnalyticsDate" DATE DEFAULT CURRENT_DATE,
+    "adAnalyticsImpressions" INTEGER DEFAULT 0,
+    "adAnalyticsClicks" INTEGER DEFAULT 0,
+    "adAnalyticsCreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE("adAnalyticsAdvertisementId", "adAnalyticsDate")
 );

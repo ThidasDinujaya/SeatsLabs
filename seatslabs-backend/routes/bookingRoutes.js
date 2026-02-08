@@ -4,6 +4,9 @@ const bookingController = require('../controllers/bookingController');
 const { authenticate, authorize } = require('../middlewares/auth');
 const { validateBooking } = require('../validators/bookingValidator');
 
+// Public/Shared Routes
+router.get('/available-slots', bookingController.getAvailableSlots);
+
 // Customer Routes
 router.post('/',
     authenticate,

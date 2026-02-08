@@ -3,11 +3,11 @@ const pool = require('../config/database');
 const vehicleController = {
     addVehicle: async (req, res) => {
         try {
-            const { brandId, modelId, bodyTypeId, registrationNumber, manufactureYear, color, mileage } = req.body;
-            const customerId = req.user.customer_id;
+            const { brandId, modelId, bodyTypeId, registrationNumber, manufactureYear, vehicleColor, vehicleMileage } = req.body;
+            const customerId = req.user.customerId;
             const result = await pool.query(
-                'INSERT INTO vehicles (customer_id, vehicle_brand_id, vehicle_model_id, vehicle_body_type_id, registration_number, manufacture_year, color, mileage) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-                [customerId, brandId, modelId, bodyTypeId, registrationNumber, manufactureYear, color, mileage]
+                'INSERT INTO "Vehicles" ("vehicleCustomerId", "vehicleVehicleBrandId", "vehicleVehicleModelId", "vehicleVehicleBodyTypeId", "vehicleRegistrationNumber", "vehicleManufactureYear", "vehicleColor", "vehicleMileage") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+                [customerId, brandId, modelId, bodyTypeId, registrationNumber, manufactureYear, vehicleColor, vehicleMileage]
             );
             res.status(201).json({ success: true, data: result.rows[0] });
         } catch (error) {
@@ -17,8 +17,8 @@ const vehicleController = {
 
     getCustomerVehicles: async (req, res) => {
         try {
-            const customerId = req.user.customer_id;
-            const result = await pool.query('SELECT v.*, vb.vehicle_brand_name, vm.vehicle_model_name FROM vehicles v JOIN vehicle_brands vb ON v.vehicle_brand_id = vb.vehicle_brand_id JOIN vehicle_models vm ON v.vehicle_model_id = vm.vehicle_model_id WHERE v.customer_id = $1', [customerId]);
+            const customerId = req.user.customerId;
+            const result = await pool.query('SELECT v.*, vb."vehicleBrandName", vm."vehicleModelName" FROM "Vehicles" v JOIN "VehicleBrands" vb ON v."vehicleVehicleBrandId" = vb."vehicleBrandId" JOIN "VehicleModels" vm ON v."vehicleVehicleModelId" = vm."vehicleModelId" WHERE v."vehicleCustomerId" = $1', [customerId]);
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -28,8 +28,8 @@ const vehicleController = {
     updateVehicle: async (req, res) => {
         try {
             const { vehicleId } = req.params;
-            const { color, mileage } = req.body;
-            await pool.query('UPDATE vehicles SET color = $1, mileage = $2, updated_at = CURRENT_TIMESTAMP WHERE vehicle_id = $3 AND customer_id = $4', [color, mileage, vehicleId, req.user.customer_id]);
+            const { vehicleColor, vehicleMileage } = req.body;
+            await pool.query('UPDATE "Vehicles" SET "vehicleColor" = $1, "vehicleMileage" = $2, "vehicleUpdatedAt" = CURRENT_TIMESTAMP WHERE "vehicleId" = $3 AND "vehicleCustomerId" = $4', [vehicleColor, vehicleMileage, vehicleId, req.user.customerId]);
             res.json({ success: true, message: 'Vehicle updated' });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -39,7 +39,7 @@ const vehicleController = {
     deleteVehicle: async (req, res) => {
         try {
             const { vehicleId } = req.params;
-            await pool.query('DELETE FROM vehicles WHERE vehicle_id = $1 AND customer_id = $2', [vehicleId, req.user.customer_id]);
+            await pool.query('DELETE FROM "Vehicles" WHERE "vehicleId" = $1 AND "vehicleCustomerId" = $2', [vehicleId, req.user.customerId]);
             res.json({ success: true, message: 'Vehicle deleted' });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -48,7 +48,7 @@ const vehicleController = {
 
     getAllBrands: async (req, res) => {
         try {
-            const result = await pool.query('SELECT * FROM vehicle_brands ORDER BY vehicle_brand_name');
+            const result = await pool.query('SELECT * FROM "VehicleBrands" ORDER BY "vehicleBrandName"');
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -58,7 +58,7 @@ const vehicleController = {
     getModelsByBrand: async (req, res) => {
         try {
             const { brandId } = req.params;
-            const result = await pool.query('SELECT * FROM vehicle_models WHERE vehicle_brand_id = $1 ORDER BY vehicle_model_name', [brandId]);
+            const result = await pool.query('SELECT * FROM "VehicleModels" WHERE "vehicleModelVehicleBrandId" = $1 ORDER BY "vehicleModelName"', [brandId]);
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -67,7 +67,7 @@ const vehicleController = {
 
     getAllBodyTypes: async (req, res) => {
         try {
-            const result = await pool.query('SELECT * FROM vehicle_body_types ORDER BY vehicle_body_type_name');
+            const result = await pool.query('SELECT * FROM "VehicleBodyTypes" ORDER BY "vehicleBodyTypeName"');
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -76,8 +76,8 @@ const vehicleController = {
 
     createBrand: async (req, res) => {
         try {
-            const { name, country } = req.body;
-            const result = await pool.query('INSERT INTO vehicle_brands (vehicle_brand_name, country) VALUES ($1, $2) RETURNING *', [name, country]);
+            const { name, vehicleBrandCountry } = req.body;
+            const result = await pool.query('INSERT INTO "VehicleBrands" ("vehicleBrandName", "vehicleBrandCountry") VALUES ($1, $2) RETURNING *', [name, vehicleBrandCountry]);
             res.status(201).json({ success: true, data: result.rows[0] });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -87,7 +87,7 @@ const vehicleController = {
     createModel: async (req, res) => {
         try {
             const { brandId, name, year } = req.body;
-            const result = await pool.query('INSERT INTO vehicle_models (vehicle_brand_id, vehicle_model_name, year_introduced) VALUES ($1, $2, $3) RETURNING *', [brandId, name, year]);
+            const result = await pool.query('INSERT INTO "VehicleModels" ("vehicleModelVehicleBrandId", "vehicleModelName", "vehicleModelYearIntroduced") VALUES ($1, $2, $3) RETURNING *', [brandId, name, year]);
             res.status(201).json({ success: true, data: result.rows[0] });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -96,8 +96,8 @@ const vehicleController = {
 
     createBodyType: async (req, res) => {
         try {
-            const { name, description } = req.body;
-            const result = await pool.query('INSERT INTO vehicle_body_types (vehicle_body_type_name, description) VALUES ($1, $2) RETURNING *', [name, description]);
+            const { name, vehicleDescription } = req.body;
+            const result = await pool.query('INSERT INTO "VehicleBodyTypes" ("vehicleBodyTypeName", "vehicleBodyTypeDescription") VALUES ($1, $2) RETURNING *', [name, vehicleDescription]);
             res.status(201).json({ success: true, data: result.rows[0] });
         } catch (error) {
             res.status(400).json({ error: error.message });

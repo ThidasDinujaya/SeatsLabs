@@ -49,6 +49,12 @@ router.get('/campaigns',
     advertisementController.getAllCampaigns
 );
 
+router.get('/all-ads',
+    authenticate,
+    authorize('Manager'),
+    advertisementController.getAllAdvertisements
+);
+
 router.put('/ads/:adId/approve',
     authenticate,
     authorize('Manager'),

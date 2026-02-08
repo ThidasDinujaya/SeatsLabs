@@ -3,640 +3,349 @@ const pool = require('../config/database');
 const fs = require('fs');
 const path = require('path');
 
+const COLORS = {
+    primary: '#1a56db',
+    secondary: '#1e293b',
+    text: '#374151',
+    lightText: '#6b7280',
+    border: '#e5e7eb',
+    background: '#f9fafb'
+};
+
+const drawHeader = (doc, title, subtitle) => {
+    doc.fillColor(COLORS.primary)
+        .fontSize(24)
+        .font('Helvetica-Bold')
+        .text('SeatsLabs', 50, 45);
+
+    doc.fillColor(COLORS.secondary)
+        .fontSize(10)
+        .font('Helvetica')
+        .text('Professional Automotive Management', 50, 75);
+
+    doc.moveTo(50, 95).lineTo(550, 95).strokeColor(COLORS.border).stroke();
+
+    doc.fillColor(COLORS.secondary)
+        .fontSize(18)
+        .font('Helvetica-Bold')
+        .text(title, 50, 115);
+
+    doc.fillColor(COLORS.lightText)
+        .fontSize(10)
+        .font('Helvetica')
+        .text(subtitle, 50, 140);
+
+    doc.moveDown(2);
+};
+
+const drawFooter = (doc) => {
+    const pageCount = doc.bufferedPageRange().count;
+    for (let i = 0; i < pageCount; i++) {
+        doc.switchToPage(i);
+        doc.fillColor(COLORS.lightText)
+            .fontSize(8)
+            .text(
+                `SeatsLabs | Generated: ${new Date().toLocaleString()} | Page ${i + 1} of ${pageCount}`,
+                50,
+                doc.page.height - 50,
+                { align: 'center', width: 500 }
+            );
+    }
+};
+
 const reportController = {
-    // 1. DAILY BOOKING REPORT
     generateDailyBookingReport: async (req, res) => {
         try {
             const { date } = req.query;
             const reportDate = date || new Date().toISOString().split('T')[0];
 
             const query = `
-        SELECT 
-          b.booking_id,
-          b.booking_reference,
-          b.scheduled_date_time,
-          b.booking_status,
-          b.estimated_price,
-          s.service_name,
-          s.duration_minutes,
-          v.registration_number,
-          vb.vehicle_brand_name,
-          vm.vehicle_model_name,
-          CONCAT(cu.user_first_name, ' ', cu.user_last_name) as customer_name,
-          cu.user_phone_number as customer_phone,
-          CONCAT(tu.user_first_name, ' ', tu.user_last_name) as technician_name,
-          ts.start_time,
-          ts.end_time
-        FROM bookings b
-        JOIN services s ON b.service_id = s.service_id
-        JOIN vehicles v ON b.vehicle_id = v.vehicle_id
-        JOIN vehicle_brands vb ON v.vehicle_brand_id = vb.vehicle_brand_id
-        JOIN vehicle_models vm ON v.vehicle_model_id = vm.vehicle_model_id
-        JOIN customers c ON b.customer_id = c.customer_id
-        JOIN users cu ON c.user_id = cu.user_id
-        LEFT JOIN technicians t ON b.technician_id = t.technician_id
-        LEFT JOIN users tu ON t.user_id = tu.user_id
-        JOIN time_slots ts ON b.time_slot_id = ts.time_slot_id
-        WHERE DATE(b.scheduled_date_time) = $1
-        ORDER BY b.scheduled_date_time ASC
-      `;
+                SELECT 
+                    b."bookingReference", ts."timeSlotStartTime",
+                    CONCAT(cu."userFirstName", ' ', cu."userLastName") as customer,
+                    CONCAT(vb."vehicleBrandName", ' ', vm."vehicleModelName") as vehicle,
+                    s."serviceName", b."bookingStatus", b."bookingEstimatedPrice"
+                FROM "Bookings" b
+                JOIN "Services" s ON b."serviceId" = s."serviceId"
+                JOIN "Vehicles" v ON b."vehicleId" = v."vehicleId"
+                JOIN "VehicleBrands" vb ON v."vehicleBrandId" = vb."vehicleBrandId"
+                JOIN "VehicleModels" vm ON v."vehicleModelId" = vm."vehicleModelId"
+                JOIN "Customers" c ON b."customerId" = c."customerId"
+                JOIN "Users" cu ON c."userId" = cu."userId"
+                JOIN "TimeSlots" ts ON b."timeSlotId" = ts."timeSlotId"
+                WHERE DATE(b."bookingScheduledDateTime") = $1
+                ORDER BY ts."timeSlotStartTime" ASC`;
 
-            const bookings = await pool.query(query, [reportDate]);
-
-            // Get summary statistics
-            const summaryQuery = `
-        SELECT 
-          COUNT(*) as total_bookings,
-          COUNT(CASE WHEN booking_status = 'Completed' THEN 1 END) as completed,
-          COUNT(CASE WHEN booking_status = 'Pending' THEN 1 END) as pending,
-          COUNT(CASE WHEN booking_status = 'In Progress' THEN 1 END) as in_progress,
-          COUNT(CASE WHEN booking_status = 'Cancelled' THEN 1 END) as cancelled,
-          COALESCE(SUM(CASE WHEN booking_status = 'Completed' THEN estimated_price ELSE 0 END), 0) as total_revenue
-        FROM bookings
-        WHERE DATE(scheduled_date_time) = $1
-      `;
-
-            const summary = await pool.query(summaryQuery, [reportDate]);
-
-            const doc = new PDFDocument({ margin: 50 });
-            const filename = `daily-booking-report-${reportDate}.pdf`;
+            const data = await pool.query(query, [reportDate]);
+            const filename = `daily-${reportDate}.pdf`;
             const filepath = path.join(__dirname, '../reports', filename);
 
-            // Pipe PDF to file
+            const doc = new PDFDocument({ margin: 50, bufferPages: true });
             doc.pipe(fs.createWriteStream(filepath));
+            drawHeader(doc, 'Daily Booking Report', `Workshop Schedule for ${reportDate}`);
 
-            // Header
-            doc.fontSize(20).text('SeatsLabs Auto M Pvt Ltd', { align: 'center' });
-            doc.fontSize(16).text('Daily Booking Report', { align: 'center' });
-            doc.fontSize(12).text(`Date: ${reportDate}`, { align: 'center' });
-            doc.moveDown();
+            // Table Header
+            let y = 180;
+            doc.fillColor(COLORS.secondary).font('Helvetica-Bold').fontSize(10);
+            doc.text('Time', 50, y);
+            doc.text('Customer / Vehicle', 100, y);
+            doc.text('Service', 300, y);
+            doc.text('Status', 450, y);
+            doc.text('Price', 510, y);
+            doc.moveTo(50, y + 15).lineTo(550, y + 15).strokeColor(COLORS.border).stroke();
 
-            // Summary Section
-            doc.fontSize(14).text('Summary', { underline: true });
-            doc.fontSize(10);
-            doc.text(`Total Bookings: ${summary.rows[0].total_bookings}`);
-            doc.text(`Completed: ${summary.rows[0].completed}`);
-            doc.text(`Pending: ${summary.rows[0].pending}`);
-            doc.text(`In Progress: ${summary.rows[0].in_progress}`);
-            doc.text(`Cancelled: ${summary.rows[0].cancelled}`);
-            doc.text(`Total Revenue: Rs. ${Number(summary.rows[0].total_revenue).toFixed(2)}`);
-            doc.moveDown();
-
-            // Bookings Table
-            doc.fontSize(14).text('Bookings Details', { underline: true });
-            doc.fontSize(9);
-
-            const tableTop = doc.y;
-            const tableLeft = 50;
-            let currentY = tableTop + 20;
-
-            // Table Headers
-            doc.font('Helvetica-Bold');
-            doc.text('Ref', tableLeft, currentY, { width: 50 });
-            doc.text('Time', tableLeft + 55, currentY, { width: 50 });
-            doc.text('Customer', tableLeft + 110, currentY, { width: 80 });
-            doc.text('Vehicle', tableLeft + 195, currentY, { width: 80 });
-            doc.text('Service', tableLeft + 280, currentY, { width: 80 });
-            doc.text('Status', tableLeft + 365, currentY, { width: 60 });
-            doc.text('Price', tableLeft + 430, currentY, { width: 60 });
-
-            currentY += 15;
-            doc.moveTo(tableLeft, currentY).lineTo(545, currentY).stroke();
-            currentY += 5;
-
-            // Table Data
-            doc.font('Helvetica');
-            bookings.rows.forEach(booking => {
-                const time = booking.start_time.substring(0, 5);
-                const vehicle = `${booking.vehicle_brand_name} ${booking.vehicle_model_name}`;
-                const price = `Rs. ${Number(booking.estimated_price).toFixed(2)}`;
-
-                doc.text(booking.booking_reference.substring(0, 8), tableLeft, currentY, { width: 50 });
-                doc.text(time, tableLeft + 55, currentY, { width: 50 });
-                doc.text(booking.customer_name, tableLeft + 110, currentY, { width: 80 });
-                doc.text(vehicle, tableLeft + 195, currentY, { width: 80 });
-                doc.text(booking.service_name.substring(0, 15), tableLeft + 280, currentY, { width: 80 });
-                doc.text(booking.booking_status, tableLeft + 365, currentY, { width: 60 });
-                doc.text(price, tableLeft + 430, currentY, { width: 60 });
-
-                currentY += 20;
-
-                // Page break if needed
-                if (currentY > 700) {
-                    doc.addPage();
-                    currentY = 50;
-                }
+            y += 25;
+            doc.font('Helvetica').fontSize(9).fillColor(COLORS.text);
+            data.rows.forEach(row => {
+                if (y > 700) { doc.addPage(); y = 50; }
+                doc.text(row.timeSlotStartTime.substring(0, 5), 50, y);
+                doc.text(`${row.customer}\n${row.vehicle}`, 100, y, { width: 180 });
+                doc.text(row.serviceName, 300, y, { width: 140 });
+                doc.text(row.bookingStatus, 450, y);
+                doc.text(Number(row.bookingEstimatedPrice).toFixed(0), 510, y);
+                y += 35;
             });
 
-            // Footer
-            doc.fontSize(8).text(
-                `Generated on ${new Date().toLocaleString()}`,
-                50,
-                doc.page.height - 50,
-                { align: 'center' }
-            );
-
+            drawFooter(doc);
             doc.end();
-
-            res.json({
-                success: true,
-                message: 'Report generated successfully',
-                filename: filename,
-                downloadUrl: `/api/reports/download/${filename}`
-            });
+            res.json({ success: true, filename, downloadUrl: `/api/reports/download/${filename}` });
         } catch (error) {
-            res.status(500).json({ error: error.message });
+            console.error('Report Error:', error);
+            res.status(500).json({ success: false, error: error.message });
         }
     },
 
-    // 2. MONTHLY REVENUE REPORT
     generateMonthlyRevenueReport: async (req, res) => {
         try {
             const { month, year } = req.query;
-            const reportMonth = month || new Date().getMonth() + 1;
-            const reportYear = year || new Date().getFullYear();
+            const m = month || new Date().getMonth() + 1;
+            const y_req = year || new Date().getFullYear();
 
-            // Service Revenue
-            const serviceRevenueQuery = `
-        SELECT 
-          DATE(scheduled_date_time) as date,
-          COUNT(*) as bookings,
-          SUM(estimated_price) as revenue
-        FROM bookings
-        WHERE EXTRACT(MONTH FROM scheduled_date_time) = $1
-          AND EXTRACT(YEAR FROM scheduled_date_time) = $2
-          AND booking_status = 'Completed'
-        GROUP BY DATE(scheduled_date_time)
-        ORDER BY date
-      `;
+            const query = `
+                SELECT 
+                    DATE("bookingScheduledDateTime") as date,
+                    SUM("bookingEstimatedPrice") as service_rev,
+                    COUNT(*) as "Bookings"
+                FROM "Bookings" 
+                WHERE EXTRACT(MONTH FROM "bookingScheduledDateTime") = $1 
+                AND EXTRACT(YEAR FROM "bookingScheduledDateTime") = $2
+                AND "bookingStatus" = 'Completed'
+                GROUP BY DATE("bookingScheduledDateTime")
+                ORDER BY date`;
 
-            const serviceRevenue = await pool.query(serviceRevenueQuery, [reportMonth, reportYear]);
-
-            // Advertisement Revenue
-            const adRevenueQuery = `
-        SELECT 
-          DATE(payment_date_time) as date,
-          COUNT(*) as campaigns,
-          SUM(amount) as revenue
-        FROM ad_payments
-        WHERE EXTRACT(MONTH FROM payment_date_time) = $1
-          AND EXTRACT(YEAR FROM payment_date_time) = $2
-          AND payment_status = 'Completed'
-        GROUP BY DATE(payment_date_time)
-        ORDER BY date
-      `;
-
-            const adRevenue = await pool.query(adRevenueQuery, [reportMonth, reportYear]);
-
-            // Total Summary
-            const summaryQuery = `
-        SELECT 
-          (SELECT COALESCE(SUM(estimated_price), 0) FROM bookings 
-           WHERE EXTRACT(MONTH FROM scheduled_date_time) = $1
-           AND EXTRACT(YEAR FROM scheduled_date_time) = $2
-           AND booking_status = 'Completed') as total_service_revenue,
-          (SELECT COALESCE(SUM(amount), 0) FROM ad_payments 
-           WHERE EXTRACT(MONTH FROM payment_date_time) = $1
-           AND EXTRACT(YEAR FROM payment_date_time) = $2
-           AND payment_status = 'Completed') as total_ad_revenue,
-          (SELECT COUNT(*) FROM bookings 
-           WHERE EXTRACT(MONTH FROM scheduled_date_time) = $1
-           AND EXTRACT(YEAR FROM scheduled_date_time) = $2
-           AND booking_status = 'Completed') as total_bookings,
-          (SELECT COUNT(*) FROM ad_campaigns 
-           WHERE EXTRACT(MONTH FROM start_date) = $1
-           AND EXTRACT(YEAR FROM start_date) = $2) as total_campaigns
-      `;
-
-            const summary = await pool.query(summaryQuery, [reportMonth, reportYear]);
-
-            const doc = new PDFDocument({ margin: 50 });
-            const filename = `monthly-revenue-report-${reportYear}-${reportMonth}.pdf`;
+            const data = await pool.query(query, [m, y_req]);
+            const filename = `revenue-${y_req}-${m}.pdf`;
             const filepath = path.join(__dirname, '../reports', filename);
 
+            const doc = new PDFDocument({ margin: 50, bufferPages: true });
             doc.pipe(fs.createWriteStream(filepath));
+            drawHeader(doc, 'Monthly Revenue Report', `Financial Summary for ${m}/${y_req}`);
 
-            // Header
-            doc.fontSize(20).text('SeatsLabs Auto M Pvt Ltd', { align: 'center' });
-            doc.fontSize(16).text('Monthly Revenue Report', { align: 'center' });
-            doc.fontSize(12).text(`Period: ${reportMonth}/${reportYear}`, { align: 'center' });
-            doc.moveDown();
+            let total = 0;
+            let y = 180;
+            doc.fillColor(COLORS.secondary).font('Helvetica-Bold').fontSize(10);
+            doc.text('Date', 50, y);
+            doc.text('Bookings', 200, y);
+            doc.text('Daily Revenue (Rs.)', 400, y);
+            doc.moveTo(50, y + 15).lineTo(550, y + 15).stroke();
 
-            // Summary
-            const totalRevenue = Number(summary.rows[0].total_service_revenue) +
-                Number(summary.rows[0].total_ad_revenue);
-
-            doc.fontSize(14).text('Revenue Summary', { underline: true });
-            doc.fontSize(11);
-            doc.text(`Total Service Revenue: Rs. ${Number(summary.rows[0].total_service_revenue).toFixed(2)}`);
-            doc.text(`Total Advertisement Revenue: Rs. ${Number(summary.rows[0].total_ad_revenue).toFixed(2)}`);
-            doc.text(`Total Revenue: Rs. ${totalRevenue.toFixed(2)}`, { underline: true });
-            doc.moveDown();
-            doc.text(`Total Completed Bookings: ${summary.rows[0].total_bookings}`);
-            doc.text(`Total Ad Campaigns: ${summary.rows[0].total_campaigns}`);
-            doc.moveDown();
-
-            // Daily Breakdown Chart (Text-based)
-            doc.fontSize(14).text('Daily Revenue Breakdown', { underline: true });
-            doc.fontSize(9);
-
-            serviceRevenue.rows.forEach(day => {
-                doc.text(
-                    `${day.date} | Bookings: ${day.bookings} | Revenue: Rs. ${Number(day.revenue).toFixed(2)}`
-                );
+            y += 25;
+            doc.font('Helvetica').fontSize(10);
+            data.rows.forEach(row => {
+                const rev = Number(row.service_rev);
+                total += rev;
+                doc.text(row.date.toISOString().split('T')[0], 50, y);
+                doc.text(row.Bookings, 200, y);
+                doc.text(rev.toLocaleString(), 400, y);
+                y += 20;
             });
 
-            doc.moveDown();
+            y += 20;
+            doc.rect(50, y, 500, 40).fill(COLORS.background);
+            doc.fillColor(COLORS.primary).font('Helvetica-Bold').fontSize(14);
+            doc.text(`TOTAL MONTHLY REVENUE: Rs. ${total.toLocaleString()}`, 70, y + 12);
 
-            // Advertisement Revenue Breakdown
-            doc.fontSize(14).text('Advertisement Revenue Breakdown', { underline: true });
-            doc.fontSize(9);
-
-            adRevenue.rows.forEach(day => {
-                doc.text(
-                    `${day.date} | Campaigns: ${day.campaigns} | Revenue: Rs. ${Number(day.revenue).toFixed(2)}`
-                );
-            });
-
-            // Footer
-            doc.fontSize(8).text(
-                `Generated on ${new Date().toLocaleString()}`,
-                50,
-                doc.page.height - 50,
-                { align: 'center' }
-            );
-
+            drawFooter(doc);
             doc.end();
-
-            res.json({
-                success: true,
-                message: 'Report generated successfully',
-                filename: filename,
-                downloadUrl: `/api/reports/download/${filename}`
-            });
+            res.json({ success: true, filename, downloadUrl: `/api/reports/download/${filename}` });
         } catch (error) {
-            res.status(500).json({ error: error.message });
+            console.error('Report Error:', error);
+            res.status(500).json({ success: false, error: error.message });
         }
     },
 
-    // 3. TECHNICIAN PERFORMANCE REPORT
     generateTechnicianPerformanceReport: async (req, res) => {
         try {
             const { startDate, endDate } = req.query;
-
             const query = `
-        SELECT 
-          t.technician_id,
-          CONCAT(u.user_first_name, ' ', u.user_last_name) as technician_name,
-          t.specialization,
-          COUNT(b.booking_id) as total_jobs,
-          COUNT(CASE WHEN b.booking_status = 'Completed' THEN 1 END) as completed_jobs,
-          AVG(CASE 
-            WHEN b.booking_status = 'Completed' 
-            THEN EXTRACT(EPOCH FROM (b.actual_end_time - b.actual_start_time))/60 
-          END) as avg_service_time_minutes,
-          AVG(f.technician_rating) as avg_rating,
-          COUNT(f.feedback_id) as total_ratings
-        FROM technicians t
-        JOIN users u ON t.user_id = u.user_id
-        LEFT JOIN bookings b ON t.technician_id = b.technician_id
-          AND DATE(b.scheduled_date_time) BETWEEN $1 AND $2
-        LEFT JOIN feedbacks f ON t.technician_id = f.technician_id
-          AND DATE(f.submitted_at) BETWEEN $1 AND $2
-        GROUP BY t.technician_id, u.user_first_name, u.user_last_name, t.specialization
-        ORDER BY completed_jobs DESC
-      `;
+                SELECT 
+                    CONCAT(u."userFirstName", ' ', u."userLastName") as name,
+                    t."technicianSpecialization",
+                    COUNT(b."bookingId") as jobs,
+                    AVG(f."feedbackTechnicianRating") as rating
+                FROM "Technicians" t
+                JOIN "Users" u ON t."userId" = u."userId"
+                LEFT JOIN "Bookings" b ON t."technicianId" = b."technicianId"
+                    ${startDate && endDate ? 'AND DATE(b."bookingScheduledDateTime") BETWEEN $1 AND $2' : ''}
+                LEFT JOIN "Feedbacks" f ON b."bookingId" = f."bookingId"
+                GROUP BY name, t."technicianSpecialization"
+                ORDER BY jobs DESC`;
 
-            const technicians = await pool.query(query, [startDate, endDate]);
-
-            const doc = new PDFDocument({ margin: 50 });
-            const filename = `technician-performance-${startDate}-to-${endDate}.pdf`;
+            const params = startDate && endDate ? [startDate, endDate] : [];
+            const data = await pool.query(query, params);
+            const filename = `tech-performance.pdf`;
             const filepath = path.join(__dirname, '../reports', filename);
 
+            const doc = new PDFDocument({ margin: 50, bufferPages: true });
             doc.pipe(fs.createWriteStream(filepath));
+            drawHeader(doc, 'Technician Performance', startDate && endDate ? `Performance from ${startDate} to ${endDate}` : 'Overall productivity and satisfaction metrics');
 
-            // Header
-            doc.fontSize(20).text('SeatsLabs Auto M Pvt Ltd', { align: 'center' });
-            doc.fontSize(16).text('Technician Performance Report', { align: 'center' });
-            doc.fontSize(12).text(`Period: ${startDate} to ${endDate}`, { align: 'center' });
-            doc.moveDown();
+            let y = 180;
+            doc.font('Helvetica-Bold').fontSize(10).text('Technician', 50, y);
+            doc.text('Specialization', 200, y);
+            doc.text('Jobs', 350, y);
+            doc.text('Avg Rating', 450, y);
+            doc.moveTo(50, y + 15).lineTo(550, y + 15).stroke();
 
-            // Performance Table
-            doc.fontSize(14).text('Technician Performance Summary', { underline: true });
-            doc.fontSize(9);
-
-            const tableTop = doc.y + 10;
-            let currentY = tableTop + 10;
-
-            // Headers
-            doc.font('Helvetica-Bold');
-            doc.text('Technician', 50, currentY, { width: 100 });
-            doc.text('Specialization', 155, currentY, { width: 80 });
-            doc.text('Jobs', 240, currentY, { width: 40 });
-            doc.text('Completed', 285, currentY, { width: 60 });
-            doc.text('Avg Time', 350, currentY, { width: 60 });
-            doc.text('Rating', 415, currentY, { width: 40 });
-            doc.text('Reviews', 460, currentY, { width: 50 });
-
-            currentY += 15;
-            doc.moveTo(50, currentY).lineTo(545, currentY).stroke();
-            currentY += 5;
-
-            // Data
-            doc.font('Helvetica');
-            technicians.rows.forEach(tech => {
-                const avgTime = tech.avg_service_time_minutes
-                    ? `${Math.round(tech.avg_service_time_minutes)} min`
-                    : 'N/A';
-                const rating = tech.avg_rating
-                    ? Number(tech.avg_rating).toFixed(1)
-                    : 'N/A';
-
-                doc.text(tech.technician_name, 50, currentY, { width: 100 });
-                doc.text(tech.specialization || 'General', 155, currentY, { width: 80 });
-                doc.text(tech.total_jobs.toString(), 240, currentY, { width: 40 });
-                doc.text(tech.completed_jobs.toString(), 285, currentY, { width: 60 });
-                doc.text(avgTime, 350, currentY, { width: 60 });
-                doc.text(rating, 415, currentY, { width: 40 });
-                doc.text(tech.total_ratings.toString(), 460, currentY, { width: 50 });
-
-                currentY += 20;
-
-                if (currentY > 700) {
-                    doc.addPage();
-                    currentY = 50;
-                }
+            y += 25;
+            doc.font('Helvetica').fontSize(9);
+            data.rows.forEach(row => {
+                doc.text(row.name, 50, y);
+                doc.text(row.technicianSpecialization || 'General', 200, y);
+                doc.text(row.jobs, 350, y);
+                doc.text(row.rating ? Number(row.rating).toFixed(1) : 'N/A', 450, y);
+                y += 25;
             });
 
-            // Footer
-            doc.fontSize(8).text(
-                `Generated on ${new Date().toLocaleString()}`,
-                50,
-                doc.page.height - 50,
-                { align: 'center' }
-            );
-
+            drawFooter(doc);
             doc.end();
-
-            res.json({
-                success: true,
-                message: 'Report generated successfully',
-                filename: filename,
-                downloadUrl: `/api/reports/download/${filename}`
-            });
+            res.json({ success: true, filename, downloadUrl: `/api/reports/download/${filename}` });
         } catch (error) {
-            res.status(500).json({ error: error.message });
+            console.error('Report Error:', error);
+            res.status(500).json({ success: false, error: error.message });
         }
     },
 
-    // 4. CUSTOMER SATISFACTION REPORT
     generateCustomerSatisfactionReport: async (req, res) => {
         try {
             const { month, year } = req.query;
+            const m = month || new Date().getMonth() + 1;
+            const y_req = year || new Date().getFullYear();
 
             const query = `
-        SELECT 
-          DATE(f.submitted_at) as feedback_date,
-          COUNT(*) as total_feedbacks,
-          AVG(f.service_rating) as avg_service_rating,
-          AVG(f.technician_rating) as avg_technician_rating,
-          COUNT(CASE WHEN f.service_rating >= 4 THEN 1 END) as positive_service,
-          COUNT(CASE WHEN f.service_rating <= 2 THEN 1 END) as negative_service,
-          COUNT(CASE WHEN f.technician_rating >= 4 THEN 1 END) as positive_technician,
-          COUNT(CASE WHEN f.technician_rating <= 2 THEN 1 END) as negative_technician
-        FROM feedbacks f
-        WHERE EXTRACT(MONTH FROM f.submitted_at) = $1
-          AND EXTRACT(YEAR FROM f.submitted_at) = $2
-        GROUP BY DATE(f.submitted_at)
-        ORDER BY feedback_date
-      `;
+                SELECT 
+                    s."serviceName",
+                    COUNT(f."feedbackId") as count,
+                    AVG(f."feedbackServiceRating") as rating,
+                    string_agg(f."feedbackComments", ' | ') as feedback
+                FROM "Feedbacks" f
+                JOIN "Bookings" b ON f."feedbackBookingId" = b."bookingId"
+                JOIN "Services" s ON b."bookingServiceId" = s."serviceId"
+                WHERE EXTRACT(MONTH FROM f."feedbackSubmittedAt") = $1
+                AND EXTRACT(YEAR FROM f."feedbackSubmittedAt") = $2
+                GROUP BY s."serviceName"`;
 
-            const feedbacks = await pool.query(query, [month, year]);
-
-            // Get service-wise ratings
-            const serviceQuery = `
-        SELECT 
-          s.service_name,
-          COUNT(f.feedback_id) as total_ratings,
-          AVG(f.service_rating) as avg_rating
-        FROM feedbacks f
-        JOIN bookings b ON f.booking_id = b.booking_id
-        JOIN services s ON b.service_id = s.service_id
-        WHERE EXTRACT(MONTH FROM f.submitted_at) = $1
-          AND EXTRACT(YEAR FROM f.submitted_at) = $2
-        GROUP BY s.service_name
-        ORDER BY avg_rating DESC
-      `;
-
-            const serviceRatings = await pool.query(serviceQuery, [month, year]);
-
-            // Get overall statistics
-            const overallQuery = `
-        SELECT 
-          COUNT(*) as total_feedbacks,
-          AVG(service_rating) as overall_service_rating,
-          AVG(technician_rating) as overall_technician_rating,
-          (COUNT(CASE WHEN service_rating >= 4 THEN 1 END) * 100.0 / COUNT(*)) as satisfaction_rate
-        FROM feedbacks
-        WHERE EXTRACT(MONTH FROM submitted_at) = $1
-          AND EXTRACT(YEAR FROM submitted_at) = $2
-      `;
-
-            const overall = await pool.query(overallQuery, [month, year]);
-
-            const doc = new PDFDocument({ margin: 50 });
-            const filename = `customer-satisfaction-${year}-${month}.pdf`;
+            const data = await pool.query(query, [m, y_req]);
+            const filename = `satisfaction-${y_req}-${m}.pdf`;
             const filepath = path.join(__dirname, '../reports', filename);
 
+            const doc = new PDFDocument({ margin: 50, bufferPages: true });
             doc.pipe(fs.createWriteStream(filepath));
+            drawHeader(doc, 'Customer Satisfaction', `Quality Analysis for ${m}/${y_req}`);
 
-            // Header
-            doc.fontSize(20).text('SeatsLabs Auto M Pvt Ltd', { align: 'center' });
-            doc.fontSize(16).text('Customer Satisfaction Report', { align: 'center' });
-            doc.fontSize(12).text(`Period: ${month}/${year}`, { align: 'center' });
-            doc.moveDown();
-
-            // Overall Statistics
-            doc.fontSize(14).text('Overall Performance', { underline: true });
-            doc.fontSize(11);
-            doc.text(`Total Feedbacks Received: ${overall.rows[0].total_feedbacks}`);
-            doc.text(`Average Service Rating: ${Number(overall.rows[0].overall_service_rating).toFixed(2)}/5.00`);
-            doc.text(`Average Technician Rating: ${Number(overall.rows[0].overall_technician_rating).toFixed(2)}/5.00`);
-            doc.text(`Customer Satisfaction Rate: ${Number(overall.rows[0].satisfaction_rate).toFixed(1)}%`);
-            doc.moveDown();
-
-            // Service-wise Ratings
-            doc.fontSize(14).text('Service-wise Ratings', { underline: true });
-            doc.fontSize(10);
-
-            let y = doc.y + 10;
-            doc.font('Helvetica-Bold');
-            doc.text('Service Name', 50, y, { width: 200 });
-            doc.text('Total Ratings', 260, y, { width: 100 });
-            doc.text('Average Rating', 370, y, { width: 100 });
-            y += 15;
-            doc.moveTo(50, y).lineTo(480, y).stroke();
-            y += 5;
-
-            doc.font('Helvetica');
-            serviceRatings.rows.forEach(service => {
-                doc.text(service.service_name, 50, y, { width: 200 });
-                doc.text(service.total_ratings.toString(), 260, y, { width: 100 });
-                doc.text(`${Number(service.avg_rating).toFixed(2)}/5.00`, 370, y, { width: 100 });
-                y += 18;
-            });
-
-            doc.moveDown();
-
-            // Daily Breakdown
-            doc.addPage();
-            doc.fontSize(14).text('Daily Feedback Analysis', { underline: true });
-            doc.fontSize(9);
-
-            feedbacks.rows.forEach(day => {
-                doc.text(
-                    `${day.feedback_date} | Feedbacks: ${day.total_feedbacks} | ` +
-                    `Service: ${Number(day.avg_service_rating).toFixed(2)} | ` +
-                    `Technician: ${Number(day.avg_technician_rating).toFixed(2)}`
-                );
-            });
-
-            // Footer
-            doc.fontSize(8).text(
-                `Generated on ${new Date().toLocaleString()}`,
-                50,
-                doc.page.height - 50,
-                { align: 'center' }
-            );
-
-            doc.end();
-
-            res.json({
-                success: true,
-                message: 'Report generated successfully',
-                filename: filename,
-                downloadUrl: `/api/reports/download/${filename}`
-            });
-        } catch (error) {
-            res.status(500).json({ error: error.message });
-        }
-    },
-
-    // 5. ADVERTISEMENT PERFORMANCE REPORT
-    generateAdvertisementPerformanceReport: async (req, res) => {
-        try {
-            const { campaignId, startDate, endDate } = req.query;
-
-            const query = `
-        SELECT 
-          ac.campaign_name,
-          a.ad_title,
-          ad.business_name as advertiser,
-          SUM(aa.impressions) as total_impressions,
-          SUM(aa.clicks) as total_clicks,
-          CASE 
-            WHEN SUM(aa.impressions) > 0 
-            THEN (SUM(aa.clicks)::decimal / SUM(aa.impressions) * 100)
-            ELSE 0 
-          END as ctr,
-          COUNT(DISTINCT aa.analytics_date) as active_days
-        FROM advertisements a
-        JOIN ad_campaigns ac ON a.campaign_id = ac.campaign_id
-        JOIN advertisers ad ON ac.advertiser_id = ad.advertiser_id
-        LEFT JOIN ad_analytics aa ON a.advertisement_id = aa.advertisement_id
-          AND aa.analytics_date BETWEEN $1 AND $2
-        WHERE ($3::integer IS NULL OR ac.campaign_id = $3)
-        GROUP BY ac.campaign_name, a.ad_title, ad.business_name
-        ORDER BY total_impressions DESC
-      `;
-
-            const ads = await pool.query(query, [startDate, endDate, campaignId || null]);
-
-            const doc = new PDFDocument({ margin: 50, landscape: true });
-            const filename = `advertisement-performance-${startDate}-to-${endDate}.pdf`;
-            const filepath = path.join(__dirname, '../reports', filename);
-
-            doc.pipe(fs.createWriteStream(filepath));
-
-            // Header
-            doc.fontSize(20).text('SeatsLabs Auto M Pvt Ltd', { align: 'center' });
-            doc.fontSize(16).text('Advertisement Performance Report', { align: 'center' });
-            doc.fontSize(12).text(`Period: ${startDate} to ${endDate}`, { align: 'center' });
-            doc.moveDown();
-
-            // Performance Table
-            doc.fontSize(14).text('Campaign Performance', { underline: true });
-            doc.fontSize(9);
-
-            let y = doc.y + 10;
-            doc.font('Helvetica-Bold');
-            doc.text('Campaign', 50, y, { width: 120 });
-            doc.text('Ad Title', 175, y, { width: 120 });
-            doc.text('Advertiser', 300, y, { width: 100 });
-            doc.text('Impressions', 405, y, { width: 80 });
-            doc.text('Clicks', 490, y, { width: 60 });
-            doc.text('CTR%', 555, y, { width: 50 });
-            doc.text('Days', 610, y, { width: 50 });
-            y += 15;
-            doc.moveTo(50, y).lineTo(670, y).stroke();
-            y += 5;
-
-            doc.font('Helvetica');
-            ads.rows.forEach(ad => {
-                doc.text(ad.campaign_name.substring(0, 20), 50, y, { width: 120 });
-                doc.text(ad.ad_title.substring(0, 20), 175, y, { width: 120 });
-                doc.text(ad.advertiser.substring(0, 15), 300, y, { width: 100 });
-                doc.text(ad.total_impressions?.toString() || '0', 405, y, { width: 80 });
-                doc.text(ad.total_clicks?.toString() || '0', 490, y, { width: 60 });
-                doc.text(Number(ad.ctr).toFixed(2), 555, y, { width: 50 });
-                doc.text(ad.active_days?.toString() || '0', 610, y, { width: 50 });
-                y += 18;
-
-                if (y > 500) {
-                    doc.addPage({ landscape: true });
-                    y = 50;
-                }
-            });
-
-            // Footer
-            doc.fontSize(8).text(
-                `Generated on ${new Date().toLocaleString()}`,
-                50,
-                doc.page.height - 50,
-                { align: 'center' }
-            );
-
-            doc.end();
-
-            res.json({
-                success: true,
-                message: 'Report generated successfully',
-                filename: filename,
-                downloadUrl: `/api/reports/download/${filename}`
-            });
-        } catch (error) {
-            res.status(500).json({ error: error.message });
-        }
-    },
-
-    // Download Report
-    downloadReport: async (req, res) => {
-        try {
-            const { filename } = req.params;
-            const filepath = path.join(__dirname, '../reports', filename);
-
-            if (!fs.existsSync(filepath)) {
-                return res.status(404).json({ error: 'Report not found' });
+            let y = 180;
+            if (data.rows.length === 0) {
+                doc.text("No feedback data found for this period.", 50, y);
             }
 
-            res.download(filepath, filename, (err) => {
-                if (err) {
-                    res.status(500).json({ error: 'Error downloading report' });
-                }
+            data.rows.forEach(row => {
+                if (y > 650) { doc.addPage(); y = 50; }
+                const serviceName = row.serviceName || 'Unknown Service';
+                const rating = Number(row.rating) || 0;
+                const count = Number(row.count) || 0;
+                const feedback = row.feedback || '';
+
+                doc.fillColor(COLORS.primary).font('Helvetica-Bold').fontSize(12).text(serviceName, 50, y);
+                doc.fillColor(COLORS.secondary).font('Helvetica').fontSize(10).text(`Average Rating: ${rating.toFixed(1)} / 5.0 (${count} reviews)`, 50, y + 15);
+                doc.fillColor(COLORS.lightText).fontSize(8).italic().text(`Recent Feedback: ${feedback.substring(0, 200)}...`, 50, y + 30, { width: 500 });
+                y += 70;
             });
+
+            drawFooter(doc);
+            doc.end();
+            res.json({ success: true, filename, downloadUrl: `/api/reports/download/${filename}` });
         } catch (error) {
-            res.status(500).json({ error: error.message });
+            console.error('Report Error:', error);
+            res.status(500).json({ success: false, error: error.message });
         }
+    },
+
+    generateAdvertisementPerformanceReport: async (req, res) => {
+        try {
+            const { month, year } = req.query;
+            const m = month || new Date().getMonth() + 1;
+            const y_req = year || new Date().getFullYear();
+
+            const query = `
+                SELECT 
+                    c."adCampaignName",
+                    a."advertisementTitle",
+                    SUM(aa."adAnalyticsImpressions") as total_impressions,
+                    SUM(aa."adAnalyticsClicks") as total_clicks
+                FROM "Advertisements" a
+                JOIN "AdCampaigns" c ON a."advertisementCampaignId" = c."adCampaignId"
+                LEFT JOIN "AdAnalytics" aa ON a."advertisementId" = aa."adAnalyticsAdvertisementId"
+                WHERE EXTRACT(MONTH FROM aa."adAnalyticsDate") = $1
+                AND EXTRACT(YEAR FROM aa."adAnalyticsDate") = $2
+                GROUP BY c."adCampaignName", a."advertisementTitle"
+                ORDER BY total_clicks DESC`;
+
+            const data = await pool.query(query, [m, y_req]);
+            const filename = `ad-performance-${y_req}-${m}.pdf`;
+            const filepath = path.join(__dirname, '../reports', filename);
+
+            const doc = new PDFDocument({ margin: 50, bufferPages: true });
+            doc.pipe(fs.createWriteStream(filepath));
+            drawHeader(doc, 'Advertisement Performance', `Campaign Metrics for ${m}/${y_req}`);
+
+            let y = 180;
+            doc.fillColor(COLORS.secondary).font('Helvetica-Bold').fontSize(10);
+            doc.text('Campaign', 50, y);
+            doc.text('Ad Title', 200, y);
+            doc.text('Impressions', 400, y);
+            doc.text('Clicks', 500, y);
+            doc.moveTo(50, y + 15).lineTo(550, y + 15).strokeColor(COLORS.border).stroke();
+
+            y += 25;
+            doc.font('Helvetica').fontSize(9).fillColor(COLORS.text);
+            
+            if (data.rows.length === 0) {
+                 doc.text("No advertisement data found for this period.", 50, y);
+            }
+
+            data.rows.forEach(row => {
+                if (y > 700) { doc.addPage(); y = 50; }
+                doc.text(row.adCampaignName, 50, y, { width: 140 });
+                doc.text(row.advertisementTitle, 200, y, { width: 180 });
+                doc.text(row.total_impressions || 0, 400, y);
+                doc.text(row.total_clicks || 0, 500, y);
+                y += 35;
+            });
+
+            drawFooter(doc);
+            doc.end();
+            res.json({ success: true, filename, downloadUrl: `/api/reports/download/${filename}` });
+        } catch (error) {
+            console.error('Report Error:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    downloadReport: async (req, res) => {
+        const { filename } = req.params;
+        const filepath = path.join(__dirname, '../reports', filename);
+        if (fs.existsSync(filepath)) { res.download(filepath); }
+        else { res.status(404).send('Not Found'); }
     }
 };
 

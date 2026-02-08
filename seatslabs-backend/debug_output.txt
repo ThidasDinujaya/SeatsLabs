@@ -1,0 +1,27 @@
+[dotenv@17.2.3] injecting env (19) from .env -- tip: 🗂️ backup and recover secrets: https://dotenvx.com/ops
+Connecting to SeatsLabsDB...
+Tables found: [
+  'AdAnalytics',           'AdCampaigns',
+  'AdPayments',            'AdPricingPlans',
+  'Advertisements',        'Advertisers',
+  'BookingStatuses',       'Bookings',
+  'Complaints',            'Customers',
+  'Feedbacks',             'Managers',
+  'NotificationTemplates', 'Notifications',
+  'PaymentMethods',        'Payments',
+  'ServiceCategories',     'Services',
+  'Technicians',           'TimeSlots',
+  'UserTypes',             'Users',
+  'VehicleBodyTypes',      'VehicleBrands',
+  'VehicleModels',         'Vehicles'
+]
+Columns in TimeSlots: [
+  'timeSlotId',
+  'timeSlotDate',
+  'timeSlotStartTime',
+  'timeSlotEndTime',
+  'timeSlotIsAvailable',
+  'timeSlotMaxCapacity',
+  'timeSlotCurrentBookings',
+  'timeSlotCreatedAt'
+]

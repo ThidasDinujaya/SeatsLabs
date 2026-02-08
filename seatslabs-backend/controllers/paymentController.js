@@ -6,11 +6,11 @@ const paymentController = {
             const { bookingId } = req.params;
             const { amount, paymentMethodId, transactionId } = req.body;
             const result = await pool.query(
-                "INSERT INTO payments (booking_id, payment_method_id, amount, payment_status, transaction_id) VALUES ($1, $2, $3, 'Completed', $4) RETURNING *",
+                "INSERT INTO \"Payments\" (\"paymentBookingId\", \"paymentPaymentMethodId\", \"paymentAmount\", \"paymentStatus\", \"paymentTransactionId\") VALUES ($1, $2, $3, 'Completed', $4) RETURNING *",
                 [bookingId, paymentMethodId, amount, transactionId]
             );
             // Update booking status
-            await pool.query("UPDATE bookings SET booking_status = 'Paid' WHERE booking_id = $1", [bookingId]);
+            await pool.query('UPDATE "Bookings" SET "bookingStatus" = \'Paid\' WHERE "bookingId" = $1', [bookingId]);
             res.status(201).json({ success: true, data: result.rows[0] });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -19,7 +19,7 @@ const paymentController = {
 
     getCustomerPayments: async (req, res) => {
         try {
-            const result = await pool.query('SELECT p.* FROM payments p JOIN bookings b ON p.booking_id = b.booking_id WHERE b.customer_id = $1', [req.user.customer_id]);
+            const result = await pool.query('SELECT p.* FROM "Payments" p JOIN "Bookings" b ON p."paymentBookingId" = b."bookingId" WHERE b."bookingCustomerId" = $1', [req.user.customerId]);
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -27,17 +27,46 @@ const paymentController = {
     },
 
     processAdPayment: async (req, res) => {
-        // Implementation for ad payment
-        res.status(501).json({ error: 'Not implemented' });
+        try {
+            const { campaignId } = req.params;
+            const { amount, paymentMethodId, transactionId } = req.body;
+            const result = await pool.query(
+                "INSERT INTO \"AdPayments\" (\"adPaymentCampaignId\", \"adPaymentAmount\", \"adPaymentStatus\", \"adPaymentTransactionId\") VALUES ($1, $2, 'Completed', $3) RETURNING *",
+                [campaignId, amount, transactionId]
+            );
+            // Update campaign status
+            await pool.query('UPDATE "AdCampaigns" SET "adCampaignStatus" = \'Active\' WHERE "adCampaignId" = $1', [campaignId]);
+            res.status(201).json({ success: true, data: result.rows[0] });
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
     },
 
     getAdvertiserPayments: async (req, res) => {
-        res.status(501).json({ error: 'Not implemented' });
+        try {
+            const result = await pool.query(`
+                SELECT ap.*, ac."adCampaignName" 
+                FROM "AdPayments" ap 
+                JOIN "AdCampaigns" ac ON ap."adPaymentCampaignId" = ac."adCampaignId" 
+                WHERE ac."advertiserId" = $1
+            `, [req.user.advertiserId]);
+            res.json({ success: true, data: result.rows });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
     },
 
     getAllPayments: async (req, res) => {
         try {
-            const result = await pool.query('SELECT * FROM payments');
+            const result = await pool.query(`
+                SELECT p.*, b."bookingReference",
+                       u."userFirstName", u."userLastName"
+                FROM "Payments" p 
+                JOIN "Bookings" b ON p."paymentBookingId" = b."bookingId"
+                JOIN "Customers" c ON b."bookingCustomerId" = c."customerId"
+                JOIN "Users" u ON c."customerUserId" = u."userId"
+                ORDER BY p."paymentDateTime" DESC
+            `);
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -46,7 +75,7 @@ const paymentController = {
 
     getPaymentMethods: async (req, res) => {
         try {
-            const result = await pool.query('SELECT * FROM payment_methods WHERE is_active = true');
+            const result = await pool.query('SELECT * FROM "PaymentMethods" WHERE "paymentMethodIsActive" = true');
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -56,7 +85,7 @@ const paymentController = {
     createPaymentMethod: async (req, res) => {
         try {
             const { name, type } = req.body;
-            const result = await pool.query('INSERT INTO payment_methods (method_name, method_type) VALUES ($1, $2) RETURNING *', [name, type]);
+            const result = await pool.query('INSERT INTO "PaymentMethods" ("paymentMethodName", "paymentMethodType") VALUES ($1, $2) RETURNING *', [name, type]);
             res.status(201).json({ success: true, data: result.rows[0] });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -66,7 +95,7 @@ const paymentController = {
     verifyPayment: async (req, res) => {
         try {
             const { paymentId } = req.params;
-            await pool.query("UPDATE payments SET payment_status = 'Verified' WHERE payment_id = $1", [paymentId]);
+            await pool.query('UPDATE "Payments" SET "paymentStatus" = \'Verified\' WHERE "paymentId" = $1', [paymentId]);
             res.json({ success: true, message: 'Payment verified' });
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -76,7 +105,7 @@ const paymentController = {
     processRefund: async (req, res) => {
         try {
             const { paymentId } = req.params;
-            await pool.query("UPDATE payments SET payment_status = 'Refunded' WHERE payment_id = $1", [paymentId]);
+            await pool.query('UPDATE "Payments" SET "paymentStatus" = \'Refunded\' WHERE "paymentId" = $1', [paymentId]);
             res.json({ success: true, message: 'Refund processed' });
         } catch (error) {
             res.status(400).json({ error: error.message });

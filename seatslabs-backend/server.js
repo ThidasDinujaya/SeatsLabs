@@ -8,6 +8,8 @@ const pool = require('./config/database');
 
 // Import Jobs
 require('./jobs/notificationScheduler');
+const { seedSlots } = require('./utils/slotGenerator');
+seedSlots(); // Run on startup to ensure slots exist for next 30 days
 
 const app = express();
 

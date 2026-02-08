@@ -14,70 +14,75 @@ cron.schedule('0 * * * *', async () => {
         const tomorrowDate = tomorrow.toISOString().split('T')[0];
 
         const bookings = await pool.query(`
-      SELECT 
-        b.booking_id,
-        b.booking_reference,
-        b.scheduled_date_time,
-        s.service_name,
-        u.user_email,
-        u.user_phone_number,
-        u.user_first_name,
-        CONCAT(vb.vehicle_brand_name, ' ', vm.vehicle_model_name) as vehicle
-      FROM bookings b
-      JOIN customers c ON b.customer_id = c.customer_id
-      JOIN users u ON c.user_id = u.user_id
-      JOIN services s ON b.service_id = s.service_id
-      JOIN vehicles v ON b.vehicle_id = v.vehicle_id
-      JOIN vehicle_brands vb ON v.vehicle_brand_id = vb.vehicle_brand_id
-      JOIN vehicle_models vm ON v.vehicle_model_id = vm.vehicle_model_id
-      WHERE DATE(b.scheduled_date_time) = $1
-        AND b.booking_status = 'Approved'
-        AND NOT EXISTS (
-          SELECT 1 FROM notifications
-          WHERE booking_id = b.booking_id
-          AND notification_type = '24_hour_reminder'
-        )
-    `, [tomorrowDate]);
+            SELECT 
+                b."bookingId",
+                b."bookingReference",
+                b."bookingScheduledDateTime",
+                s."serviceName",
+                u."userEmail",
+                u."userPhoneNumber",
+                u."userFirstName",
+                CONCAT(vb."vehicleBrandName", ' ', vm."vehicleModelName") as vehicle
+            FROM "Bookings" b
+            JOIN "Customers" c ON b."customerId" = c."customerId"
+            JOIN "Users" u ON c."userId" = u."userId"
+            JOIN "Services" s ON b."serviceId" = s."serviceId"
+            JOIN "Vehicles" v ON b."vehicleId" = v."vehicleId"
+            JOIN "VehicleBrands" vb ON v."vehicleBrandId" = vb."vehicleBrandId"
+            JOIN "VehicleModels" vm ON v."vehicleModelId" = vm."vehicleModelId"
+            WHERE DATE(b."bookingScheduledDateTime") = $1
+            AND b."bookingStatus" = 'Approved'
+            AND NOT EXISTS (
+                SELECT 1 FROM "Notifications"
+                WHERE "bookingId" = b."bookingId"
+                AND "notificationType" = '24_hour_reminder'
+            )
+        `, [tomorrowDate]);
 
         for (const booking of bookings.rows) {
             // Send email reminder
             await sendEmail(
-                booking.user_email,
+                booking.userEmail,
                 'Reminder: Your Service Appointment Tomorrow',
                 `
-          <h2>Booking Reminder</h2>
-          <p>Dear ${booking.user_first_name},</p>
-          <p>This is a reminder that your service appointment is tomorrow:</p>
-          <ul>
-            <li><strong>Reference:</strong> ${booking.booking_reference}</li>
-            <li><strong>Service:</strong> ${booking.service_name}</li>
-            <li><strong>Time:</strong> ${new Date(booking.scheduled_date_time).toLocaleString()}</li>
-            <li><strong>Vehicle:</strong> ${booking.vehicle}</li>
-          </ul>
-          <p>Please arrive 10 minutes before your scheduled time.</p>
-        `
+                <h2>Booking Reminder</h2>
+                <p>Dear ${booking.userFirstName},</p>
+                <p>This is a reminder that your service appointment is tomorrow:</p>
+                <ul>
+                    <li><strong>Reference:</strong> ${booking.bookingReference}</li>
+                    <li><strong>Service:</strong> ${booking.serviceName}</li>
+                    <li><strong>Time:</strong> ${new Date(booking.bookingScheduledDateTime).toLocaleString()}</li>
+                    <li><strong>Vehicle:</strong> ${booking.vehicle}</li>
+                </ul>
+                <p>Please arrive 10 minutes before your scheduled time.</p>
+                `
             );
 
             // Send SMS reminder
             await sendSMS(
-                booking.user_phone_number,
-                `Reminder: Your SeatsLabs appointment ${booking.booking_reference} is tomorrow at ${new Date(booking.scheduled_date_time).toLocaleTimeString()}. See you soon!`
+                booking.userPhoneNumber,
+                `Reminder: Your SeatsLabs appointment ${booking.bookingReference} is tomorrow at ${new Date(booking.bookingScheduledDateTime).toLocaleTimeString()}. See you soon!`
             );
 
             // Log notification
-            await pool.query(`
-        INSERT INTO notifications
-        (user_id, booking_id, notification_type, notification_title, notification_message, delivery_status, sent_time)
-        VALUES (
-          (SELECT user_id FROM customers WHERE customer_id = $1),
-          $2,
-          '24_hour_reminder',
-          'Appointment Reminder',
-          'Your service appointment is tomorrow',
-          'Sent',
-          CURRENT_TIMESTAMP
-        )
-      `, [booking.customer_id, booking.booking_id]);
+            // First get user_id from booking -> customer -> user
+            const userIdResult = await pool.query('SELECT "userId" FROM "Customers" WHERE "customerId" = (SELECT "customerId" FROM "Bookings" WHERE "bookingId" = $1)', [booking.bookingId]);
+            const userId = userIdResult.rows[0]?.userId;
+
+            if (userId) {
+                await pool.query(`
+                    INSERT INTO "Notifications"
+                    ("userId", "bookingId", "notificationType", "notificationTitle", "notificationMessage", "notificationIsRead", "notificationCreatedAt")
+                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+                `, [
+                    userId,
+                    booking.bookingId,
+                    '24_hour_reminder',
+                    'Appointment Reminder',
+                    'Your service appointment is tomorrow',
+                    false
+                ]);
+            }
         }
 
         console.log(`Sent ${bookings.rows.length} 24-hour reminders`);

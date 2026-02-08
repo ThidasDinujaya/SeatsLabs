@@ -6,23 +6,23 @@ const serviceController = {
             const { categoryId, available } = req.query;
 
             let query = `
-        SELECT s.*, sc.service_category_name 
-        FROM services s
-        LEFT JOIN service_categories sc ON s.service_category_id = sc.service_category_id
+        SELECT s.*, sc."serviceCategoryName" 
+        FROM "Services" s
+        LEFT JOIN "ServiceCategories" sc ON s."serviceCategoryId" = sc."serviceCategoryId"
         WHERE 1=1
       `;
             const params = [];
 
             if (categoryId) {
                 params.push(categoryId);
-                query += ` AND s.service_category_id = $${params.length}`;
+                query += ` AND s.serviceCategoryId = $${params.length}`;
             }
 
             if (available === 'true') {
-                query += ' AND s.is_available = true';
+                query += ' AND s.serviceIsAvailable = true';
             }
 
-            query += ' ORDER BY s.service_name';
+            query += ' ORDER BY s.serviceName';
 
             const result = await pool.query(query, params);
 
@@ -44,17 +44,17 @@ const serviceController = {
                 serviceDescription,
                 durationMinutes,
                 basePrice,
-                requirements
+                serviceRequirements
             } = req.body;
 
             const result = await pool.query(
-                `INSERT INTO services 
-        (service_category_id, service_name, service_description, 
-         duration_minutes, base_price, requirements)
+                `INSERT INTO "Services" 
+        ("serviceCategoryId", "serviceName", "serviceDescription", 
+         "serviceDurationMinutes", "serviceBasePrice", "serviceRequirements")
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *`,
                 [serviceCategoryId, serviceName, serviceDescription,
-                    durationMinutes, basePrice, requirements]
+                    durationMinutes, basePrice, serviceRequirements]
             );
 
             res.status(201).json({
@@ -73,7 +73,7 @@ const serviceController = {
             const { basePrice } = req.body;
 
             await pool.query(
-                'UPDATE services SET base_price = $1, updated_at = CURRENT_TIMESTAMP WHERE service_id = $2',
+                'UPDATE "Services" SET "serviceBasePrice" = $1, "serviceUpdatedAt" = CURRENT_TIMESTAMP WHERE "serviceId" = $2',
                 [basePrice, serviceId]
             );
 
@@ -92,7 +92,7 @@ const serviceController = {
             const { durationMinutes } = req.body;
 
             await pool.query(
-                'UPDATE services SET duration_minutes = $1, updated_at = CURRENT_TIMESTAMP WHERE service_id = $2',
+                'UPDATE "Services" SET "serviceDurationMinutes" = $1, "serviceUpdatedAt" = CURRENT_TIMESTAMP WHERE "serviceId" = $2',
                 [durationMinutes, serviceId]
             );
 
@@ -107,7 +107,7 @@ const serviceController = {
 
     getAllCategories: async (req, res) => {
         try {
-            const result = await pool.query('SELECT * FROM service_categories ORDER BY service_category_name');
+            const result = await pool.query('SELECT * FROM "ServiceCategories" ORDER BY "serviceCategoryName"');
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -117,7 +117,7 @@ const serviceController = {
     getServiceById: async (req, res) => {
         try {
             const { serviceId } = req.params;
-            const result = await pool.query('SELECT * FROM services WHERE service_id = $1', [serviceId]);
+            const result = await pool.query('SELECT * FROM "Services" WHERE "serviceId" = $1', [serviceId]);
             if (result.rows.length === 0) {
                 return res.status(404).json({ error: 'Service not found' });
             }
@@ -129,10 +129,10 @@ const serviceController = {
 
     createCategory: async (req, res) => {
         try {
-            const { name, description } = req.body;
+            const { name, serviceDescription } = req.body;
             const result = await pool.query(
-                'INSERT INTO service_categories (service_category_name, service_category_description) VALUES ($1, $2) RETURNING *',
-                [name, description]
+                'INSERT INTO "ServiceCategories" ("serviceCategoryName", "serviceCategoryDescription") VALUES ($1, $2) RETURNING *',
+                [name, serviceDescription]
             );
             res.status(201).json({ success: true, data: result.rows[0] });
         } catch (error) {
@@ -143,10 +143,10 @@ const serviceController = {
     updateService: async (req, res) => {
         try {
             const { serviceId } = req.params;
-            const { name, description, duration, price } = req.body;
+            const { name, serviceDescription, duration, price } = req.body;
             await pool.query(
-                'UPDATE services SET service_name = $1, service_description = $2, duration_minutes = $3, base_price = $4, updated_at = CURRENT_TIMESTAMP WHERE service_id = $5',
-                [name, description, duration, price, serviceId]
+                'UPDATE "Services" SET "serviceName" = $1, "serviceDescription" = $2, "serviceDurationMinutes" = $3, "serviceBasePrice" = $4, "serviceUpdatedAt" = CURRENT_TIMESTAMP WHERE "serviceId" = $5',
+                [name, serviceDescription, duration, price, serviceId]
             );
             res.json({ success: true, message: 'Service updated' });
         } catch (error) {
@@ -157,7 +157,7 @@ const serviceController = {
     deleteService: async (req, res) => {
         try {
             const { serviceId } = req.params;
-            await pool.query('DELETE FROM services WHERE service_id = $1', [serviceId]);
+            await pool.query('DELETE FROM "Services" WHERE "serviceId" = $1', [serviceId]);
             res.json({ success: true, message: 'Service deleted' });
         } catch (error) {
             res.status(400).json({ error: error.message });

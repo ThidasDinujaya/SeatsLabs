@@ -3,17 +3,17 @@ const { sendEmail } = require('../utils/emailService');
 const { sendSMS } = require('../utils/smsService');
 
 const notificationController = {
-    // Get user notifications
+    // Get user Notifications
     getUserNotifications: async (req, res) => {
         try {
-            const userId = req.user.user_id;
+            const userId = req.user.userId;
             const { limit = 20, offset = 0 } = req.query;
 
             const result = await pool.query(`
         SELECT *
-        FROM notifications
-        WHERE user_id = $1
-        ORDER BY created_at DESC
+        FROM "Notifications"
+        WHERE "userId" = $1
+        ORDER BY "notificationCreatedAt" DESC
         LIMIT $2 OFFSET $3
       `, [userId, limit, offset]);
 
@@ -33,10 +33,10 @@ const notificationController = {
             const { notificationId } = req.params;
 
             await pool.query(`
-        UPDATE notifications
-        SET is_read = true
-        WHERE notification_id = $1 AND user_id = $2
-      `, [notificationId, req.user.user_id]);
+        UPDATE "Notifications"
+        SET "notificationIsRead" = true
+        WHERE "notificationId" = $1 AND "userId" = $2
+      `, [notificationId, req.user.userId]);
 
             res.json({
                 success: true,
@@ -64,8 +64,8 @@ const notificationController = {
 
             // Create notification record
             const notifResult = await client.query(`
-        INSERT INTO notifications
-        (user_id, notification_type, notification_title, notification_message, delivery_status)
+        INSERT INTO "Notifications"
+        ("userId", "notificationType", "notificationTitle", "notificationMessage", "notificationDeliveryStatus")
         VALUES ($1, $2, $3, $4, 'Pending')
         RETURNING *
       `, [userId, notificationType, title, message]);
@@ -74,27 +74,27 @@ const notificationController = {
 
             // Get user details
             const userResult = await client.query(
-                'SELECT user_email, user_phone_number FROM users WHERE user_id = $1',
+                'SELECT "userEmail", "userPhoneNumber" FROM "Users" WHERE "userId" = $1',
                 [userId]
             );
             const user = userResult.rows[0];
 
             // Send email if requested
-            if (shouldSendEmail && user.user_email) {
-                await sendEmail(user.user_email, title, message);
+            if (shouldSendEmail && user.userEmail) {
+                await sendEmail(user.userEmail, title, message);
             }
 
             // Send SMS if requested
-            if (shouldSendSMS && user.user_phone_number) {
-                await sendSMS(user.user_phone_number, message);
+            if (shouldSendSMS && user.userPhoneNumber) {
+                await sendSMS(user.userPhoneNumber, message);
             }
 
             // Update notification status
             await client.query(`
-        UPDATE notifications
-        SET delivery_status = 'Sent', sent_time = CURRENT_TIMESTAMP
-        WHERE notification_id = $1
-      `, [notification.notification_id]);
+        UPDATE "Notifications"
+        SET "notificationDeliveryStatus" = 'Sent', "notificationSentTime" = CURRENT_TIMESTAMP
+        WHERE "notificationId" = $1
+      `, [notification.notificationId]);
 
             await client.query('COMMIT');
 
@@ -113,8 +113,8 @@ const notificationController = {
 
     markAllAsRead: async (req, res) => {
         try {
-            await pool.query('UPDATE notifications SET is_read = true WHERE user_id = $1', [req.user.user_id]);
-            res.json({ success: true, message: 'All notifications marked as read' });
+            await pool.query('UPDATE "Notifications" SET "notificationIsRead" = true WHERE "userId" = $1', [req.user.userId]);
+            res.json({ success: true, message: 'All Notifications marked as read' });
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
@@ -123,7 +123,7 @@ const notificationController = {
     deleteNotification: async (req, res) => {
         try {
             const { notificationId } = req.params;
-            await pool.query('DELETE FROM notifications WHERE notification_id = $1 AND user_id = $2', [notificationId, req.user.user_id]);
+            await pool.query('DELETE FROM "Notifications" WHERE "notificationId" = $1 AND "userId" = $2', [notificationId, req.user.userId]);
             res.json({ success: true, message: 'Notification deleted' });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -131,12 +131,34 @@ const notificationController = {
     },
 
     broadcastNotification: async (req, res) => {
-        res.status(501).json({ error: 'Not implemented' });
+        try {
+            const { title, message, userType } = req.body;
+            let query = 'SELECT "userId" FROM "Users" WHERE notificationIsActive = true';
+            const params = [];
+
+            if (userType) {
+                query += ' AND "userTypeId" = (SELECT "userTypeId" FROM "UserTypes" WHERE "userTypeName" = $1)';
+                params.push(userType);
+            }
+
+            const Users = await pool.query(query, params);
+
+            for (const user of Users.rows) {
+                await pool.query(
+                    'INSERT INTO "Notifications" ("userId", "notificationType", "notificationTitle", "notificationMessage") VALUES ($1, $2, $3, $4)',
+                    [user.userId, 'Broadcast', title, message]
+                );
+            }
+
+            res.json({ success: true, message: `Broadcast sent to ${Users.rows.length} Users` });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
     },
 
     getTemplates: async (req, res) => {
         try {
-            const result = await pool.query('SELECT * FROM notification_templates');
+            const result = await pool.query('SELECT * FROM "NotificationTemplates"');
             res.json({ success: true, data: result.rows });
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -145,10 +167,10 @@ const notificationController = {
 
     createTemplate: async (req, res) => {
         try {
-            const { name, type, subject, body } = req.body;
+            const { name, type, notificationTemplateSubject, body } = req.body;
             const result = await pool.query(
-                'INSERT INTO notification_templates (template_name, template_type, subject, message_body) VALUES ($1, $2, $3, $4) RETURNING *',
-                [name, type, subject, body]
+                'INSERT INTO "NotificationTemplates" (notificationTemplateTemplateName, notificationTemplateTemplateType, "notificationTemplateSubject", "notificationTemplateMessageBody") VALUES ($1, $2, $3, $4) RETURNING *',
+                [name, type, notificationTemplateSubject, body]
             );
             res.status(201).json({ success: true, data: result.rows[0] });
         } catch (error) {
